@@ -74,14 +74,21 @@ Same rule set as ST applies in AoE. The difference is that Wild Thrash PREFER fi
 ### Nature's Ally
 Buffs Kill Command after using non-KC abilities. Never cast KC twice in a row. Always weave other abilities between KC casts.
 
-### Withering Fire
-Active for the first 10 seconds of Bestial Wrath. Black Arrow is highest priority during this window.
+### Bestial Wrath (Dark Ranger)
+- 30s CD, 15s duration
+- Activates Withering Fire (first 10s of BW): Black Arrow proc + highest BA priority
+- BW button becomes Wailing Arrow once activated (one use per BW)
+- WA deals heavy damage and procs Black Arrow
+- Goal: use WA near end of Withering Fire (~7s left on BW = ~3s WF remaining) to sneak another BA into the window
 
-### Wailing Arrow Timing
-Cast at ~7s remaining on BW (= ~3s remaining on WF). Procs Black Arrow, follow up with BA.
+### Withering Fire
+Active for the first 10 seconds of Bestial Wrath. Black Arrow is highest priority during this window. BA is available on demand (proc from BW activation).
+
+### Wailing Arrow
+One use per BW. Deals heavy damage and procs Black Arrow. Cast at ~7s remaining on BW to fit the BA proc into the Withering Fire window before it expires.
 
 ### Bestial Wrath Prep
-Always spend all Barbed Shot charges before casting BW. BW CD is 90s base, reduced by Barbed Shot casts (variable).
+Always spend all Barbed Shot charges before casting BW.
 
 ## Dark Ranger: Not Modeled (Intentional)
 
