@@ -16,28 +16,27 @@ The overall project goals are documented in [Project Goals](docs/PROJECT_GOALS.m
 
 `HunterFlow` is currently an `alpha`.
 
-Current implementation focus:
+Current implementation:
 
-- Beast Mastery Hunter
-- BM heuristics currently tuned around a tested Dark Ranger build
+- Beast Mastery Hunter with two hero-path profiles:
+  - **Dark Ranger** - full cast-event state machine (Black Arrow, Withering Fire, Wailing Arrow timing, Barbed Shot charge dump)
+  - **Pack Leader** - streamlined profile (BW management, charge dump, Nature's Ally weaving, Wild Thrash AoE)
+- Automatic hero-path detection via `IsPlayerSpell` marker (switches on talent change)
+- AoE support via nameplate counting (best-effort, threshold >= 3)
 
 Planned direction:
 
-- broader hunter support over time
-- more configurable overlays and profiles
+- Marksmanship Hunter profiles (signal probes built, viability assessed)
 - additional spec-aware heuristics where the available API makes them defensible
-- frameworkized profile modules instead of one hard-coded alpha profile
 
 ## What It Does
 
 - Shows a compact hunter rotation queue on screen
 - Uses Blizzard `C_AssistedCombat` as the base recommendation source
 - Filters obvious utility noise such as `Call Pet` and `Revive Pet`
-- Supports BM-specific cast-tracked state for:
-  - `Black Arrow`
-  - `Bestial Wrath`
-  - `Wailing Arrow`
-  - `Nature's Ally`-style `Kill Command` weaving
+- Supports BM-specific cast-tracked state (Dark Ranger: Black Arrow, Bestial Wrath, Wailing Arrow; Pack Leader: BW management, Wild Thrash AoE)
+- Nature's Ally Kill Command weaving (both profiles)
+- Barbed Shot charge dump before Bestial Wrath (validated via `C_Spell.GetSpellCharges`)
 - Keeps interrupt logic out of the primary queue by default
 - Supports click-through while locked
 
@@ -93,11 +92,12 @@ World of Warcraft/_retail_/Interface/AddOns/
 
 ## Current Scope Notes
 
-The current alpha is honest but narrow:
+BM Hunter is alpha-solid with both hero paths covered:
 
-- branding is hunter-wide
-- the initial shipped profile is BM Hunter
-- the current BM heuristics were tested primarily against a Dark Ranger build
+- Dark Ranger and Pack Leader profiles auto-detected and validated in-game
+- cast-event timers (BW cooldown, Withering Fire window, BA cooldown) are heuristic estimates, not exact cooldown reads -- Midnight restricts direct cooldown access
+- AoE target counting uses nameplate enumeration which is best-effort: it counts all visible hostile nameplates, not only mobs in active combat (documented as PARTIAL in `docs/SIGNAL_VALIDATION.md`)
+- Pack Leader is intentionally leaner than Dark Ranger because the rotation has fewer decision points
 
 If you use another hunter spec today, the addon will stay inactive instead of pretending to support behavior it does not yet model.
 
@@ -105,8 +105,7 @@ If you use another hunter spec today, the addon will stay inactive instead of pr
 
 Near-term:
 
-- support more hunter specs and hero paths through explicit profiles
-- factor the current BM logic into a clearer profile module boundary
+- Marksmanship Hunter profiles (signal probes and viability assessment already built)
 - keep documenting which mechanics can be implemented directly, heuristically, or not at all
 
 If the project eventually becomes truly class-agnostic beyond hunters, the framework contract should already support that. The current public branding, however, is still intentionally hunter-focused.
