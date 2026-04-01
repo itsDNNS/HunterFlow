@@ -15,9 +15,9 @@ local function OpenRegisteredCategory()
     end
 end
 
-local function CreateCheckbox(parent, label, description, relativeTo, x, y, key)
+local function CreateCheckbox(parent, label, description, relativeTo, key)
     local check = CreateFrame("CheckButton", nil, parent, "InterfaceOptionsCheckButtonTemplate")
-    check:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", x, y)
+    check:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", 0, -14)
     check.Text:SetText(label)
 
     local desc = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -40,6 +40,48 @@ local function CreateCheckbox(parent, label, description, relativeTo, x, y, key)
     return check, desc
 end
 
+local function CreateSlider(parent, label, description, relativeTo, key, minVal, maxVal, step)
+    local container = CreateFrame("Frame", nil, parent)
+    container:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", 0, -14)
+    container:SetSize(200, 40)
+
+    local text = container:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    text:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+
+    local slider = CreateFrame("Slider", nil, container, "OptionsSliderTemplate")
+    slider:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -4)
+    slider:SetSize(180, 16)
+    slider:SetMinMaxValues(minVal, maxVal)
+    slider:SetValueStep(step)
+    slider:SetObeyStepOnDrag(true)
+    if slider.Low then slider.Low:SetText(tostring(minVal)) end
+    if slider.High then slider.High:SetText(tostring(maxVal)) end
+
+    local desc = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    desc:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -6)
+    desc:SetPoint("RIGHT", parent, "RIGHT", -24, 0)
+    desc:SetJustifyH("LEFT")
+    desc:SetText(description)
+
+    local function UpdateLabel(val)
+        text:SetText(label .. ": " .. string.format("%.0f%%", val * 100))
+    end
+
+    slider:SetScript("OnValueChanged", function(self, val)
+        val = math.floor(val / step + 0.5) * step
+        TrueShot.SetOpt(key, val)
+        UpdateLabel(val)
+    end)
+
+    slider.sync = function()
+        local val = TrueShot.GetOpt(key) or 1.0
+        slider:SetValue(val)
+        UpdateLabel(val)
+    end
+
+    return slider, desc
+end
+
 local function CreateSettingsPanel()
     local panel = CreateFrame("Frame", "TrueShotSettingsPanel", UIParent)
     panel.name = "TrueShot"
@@ -53,67 +95,73 @@ local function CreateSettingsPanel()
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Midnight-compatible rotation overlay on top of Blizzard Assisted Combat. Keep the panel lean: settings here should stay practical and low-overhead.")
+    subtitle:SetText("Midnight-compatible rotation overlay on top of Blizzard Assisted Combat.")
 
+    -- Display
     local lockCheck, lockDesc = CreateCheckbox(
         panel,
         "Lock overlay frame",
-        "Disable dragging and make the overlay click-through during combat.",
-        subtitle, 0, -18, "locked"
+        "Disable dragging and make the overlay click-through.",
+        subtitle, "locked"
     )
 
+    local combatCheck, combatDesc = CreateCheckbox(
+        panel,
+        "Show only in combat",
+        "Hide the overlay outside of combat. It will appear when you enter combat and hide when you leave.",
+        lockDesc, "combatOnly"
+    )
+
+    local scaleSlider, scaleDesc = CreateSlider(
+        panel, "Overlay scale", "Size of the overlay icons.",
+        combatDesc, "overlayScale", 0.5, 2.0, 0.1
+    )
+
+    local opacitySlider, opacityDesc = CreateSlider(
+        panel, "Overlay opacity", "Transparency of the overlay.",
+        scaleDesc, "overlayOpacity", 0.3, 1.0, 0.1
+    )
+
+    -- Features
     local castCheck, castDesc = CreateCheckbox(
         panel,
         "Show cast success feedback",
-        "Flash the recommended icon briefly when your successful cast matches the displayed recommendation.",
-        lockDesc, 0, -18, "showCastFeedback"
+        "Flash the icon briefly when your cast matches the recommendation.",
+        opacityDesc, "showCastFeedback"
     )
 
-    local cooldownCheck = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
-    cooldownCheck:SetPoint("TOPLEFT", castDesc, "BOTTOMLEFT", 0, -18)
-    cooldownCheck.Text:SetText("Show cooldown swipes (best-effort)")
+    local cooldownCheck, cooldownDesc = CreateCheckbox(
+        panel,
+        "Show cooldown swipes (best-effort)",
+        "Display cooldown sweep when readable. Not a promise of exact Midnight cooldown truth.",
+        castDesc, "showCooldownSwipe"
+    )
 
-    local cooldownDesc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    cooldownDesc:SetPoint("TOPLEFT", cooldownCheck, "BOTTOMLEFT", 24, -2)
-    cooldownDesc:SetPoint("RIGHT", panel, "RIGHT", -24, 0)
-    cooldownDesc:SetJustifyH("LEFT")
-    cooldownDesc:SetText("Use readable spell cooldown data when available and suppress obvious GCD-only churn. This is visual feedback, not a promise of exact Midnight cooldown truth.")
+    local keybindCheck, keybindDesc = CreateCheckbox(
+        panel,
+        "Show keybindings",
+        "Display the keybinding text on each icon.",
+        cooldownDesc, "showKeybinds"
+    )
 
-    cooldownCheck:SetScript("OnClick", function(self)
-        TrueShot.SetOpt("showCooldownSwipe", self:GetChecked() and true or false)
-    end)
+    local rangeCheck, rangeDesc = CreateCheckbox(
+        panel,
+        "Show range indicator",
+        "Tint the primary icon red when your target is out of range.",
+        keybindDesc, "showRangeIndicator"
+    )
 
     local whyCheck, whyDesc = CreateCheckbox(
         panel,
         "Show recommendation reason",
-        "Display a short label below the primary icon explaining why it was recommended (e.g. Withering Fire, Charge Dump, AoE). Hidden when Assisted Combat passthrough is active.",
-        cooldownDesc, 0, -18, "showWhyOverlay"
+        "Display a label below the primary icon explaining why it was recommended (e.g. Withering Fire, Charge Dump).",
+        rangeDesc, "showWhyOverlay"
     )
 
-    local phaseCheck, phaseDesc = CreateCheckbox(
-        panel,
-        "Show rotation phase",
-        "Display the current rotation phase above the overlay (Burst, AoE, Charge Dump). Hidden during normal single-target rotation.",
-        whyDesc, 0, -18, "showPhaseIndicator"
-    )
-
-    local overrideCheck, overrideDesc = CreateCheckbox(
-        panel,
-        "Show AC override indicator",
-        "Tint the primary icon border blue when TrueShot is overriding Assisted Combat. Normal border when AC passthrough is active.",
-        phaseDesc, 0, -18, "showOverrideIndicator"
-    )
-
-    local diagnosticsCheck, diagnosticsDesc = CreateCheckbox(
-        panel,
-        "Enable probe diagnostics",
-        "Keep the heavier signal probe commands off by default. Turn this on only when you explicitly want `/ts probe ...` for API validation or debugging.",
-        overrideDesc, 0, -18, "enableDiagnostics"
-    )
-
+    -- Utility
     local unlockButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     unlockButton:SetSize(160, 24)
-    unlockButton:SetPoint("TOPLEFT", diagnosticsDesc, "BOTTOMLEFT", 0, -18)
+    unlockButton:SetPoint("TOPLEFT", whyDesc, "BOTTOMLEFT", 0, -18)
     unlockButton:SetText("Unlock And Recenter")
     unlockButton:SetScript("OnClick", function()
         TrueShot.SetOpt("locked", false)
@@ -128,16 +176,18 @@ local function CreateSettingsPanel()
     hint:SetPoint("TOPLEFT", unlockButton, "BOTTOMLEFT", 0, -10)
     hint:SetPoint("RIGHT", panel, "RIGHT", -24, 0)
     hint:SetJustifyH("LEFT")
-    hint:SetText("For profile logic, keep using `/ts debug`. Probe commands stay behind the diagnostics toggle above, or `/ts diagnostics on`, so they only run when you explicitly need them.")
+    hint:SetText("For diagnostics and debugging, use /ts debug and /ts probe commands.")
 
     panel:SetScript("OnShow", function()
         lockCheck.sync()
+        combatCheck.sync()
+        scaleSlider.sync()
+        opacitySlider.sync()
         castCheck.sync()
-        cooldownCheck:SetChecked(TrueShot.GetOpt("showCooldownSwipe"))
+        cooldownCheck.sync()
+        keybindCheck.sync()
+        rangeCheck.sync()
         whyCheck.sync()
-        phaseCheck.sync()
-        overrideCheck.sync()
-        diagnosticsCheck.sync()
     end)
 
     return panel

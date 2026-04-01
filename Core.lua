@@ -21,6 +21,11 @@ local DEFAULTS = {
     showWhyOverlay = false,
     showPhaseIndicator = false,
     showOverrideIndicator = false,
+    showKeybinds = true,
+    showRangeIndicator = true,
+    combatOnly = false,
+    overlayScale = 1.0,
+    overlayOpacity = 1.0,
     hidden = false,
 }
 
@@ -82,7 +87,11 @@ local function TryActivate()
     end
 
     if not TrueShot.GetOpt("hidden") then
-        Display:Enable()
+        if TrueShot.GetOpt("combatOnly") and not UnitAffectingCombat("player") then
+            Display:Disable()
+        else
+            Display:Enable()
+        end
     end
     return true
 end
@@ -137,6 +146,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_REGEN_ENABLED" then
         Engine.combatStartTime = nil
         Engine:OnCombatEnd()
+        if TrueShot.GetOpt("combatOnly") and not TrueShot.GetOpt("hidden") then
+            Display:Disable()
+        end
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED"
         or event == "PLAYER_TALENT_UPDATE"
@@ -205,10 +217,12 @@ SlashCmdList["TRUESHOT"] = function(msg)
 
     elseif msg == "show" then
         TrueShot.SetOpt("hidden", false)
-        if Engine.activeProfile and C_AssistedCombat and C_AssistedCombat.IsAvailable() then
-            Display:Enable()
-        else
+        if not Engine.activeProfile or not C_AssistedCombat or not C_AssistedCombat.IsAvailable() then
             print("|cff00ff00[TS]|r No active profile or Assisted Combat unavailable.")
+        elseif TrueShot.GetOpt("combatOnly") and not UnitAffectingCombat("player") then
+            print("|cff00ff00[TS]|r Combat-only mode active. Overlay will show when combat starts.")
+        else
+            Display:Enable()
         end
 
     elseif msg == "options" or msg == "config" then
