@@ -1,9 +1,15 @@
 -- HunterFlow Display: presentation layer for the queue overlay
 
 local Engine = HunterFlow.Engine
+local GetTime = GetTime
+local C_Spell_GetSpellTexture = C_Spell and C_Spell.GetSpellTexture
+local C_Spell_GetSpellCooldown = C_Spell and C_Spell.GetSpellCooldown
 
 HunterFlow.Display = {}
 local Display = HunterFlow.Display
+
+local SUCCESS_FLASH_DURATION = 0.35
+local MIN_COOLDOWN_SWIPE_DURATION = 2.0
 
 ------------------------------------------------------------------------
 -- Container frame
@@ -31,6 +37,16 @@ Display.container = container
 ------------------------------------------------------------------------
 
 local icons = {}
+
+local function ClearCooldown(icon)
+    if not icon or not icon.cooldown then return end
+    if icon.cooldown.Clear then
+        icon.cooldown:Clear()
+    elseif icon.cooldown.SetCooldown then
+        icon.cooldown:SetCooldown(0, 0)
+    end
+    icon.cooldown:Hide()
+end
 
 local function GetKeybindForSpell(spellID)
     for slot = 1, 120 do
@@ -66,11 +82,26 @@ local function CreateIcon(index)
     frame.texture:SetAllPoints()
     frame.texture:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
+    frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+    frame.cooldown:SetAllPoints(frame)
+    frame.cooldown:SetHideCountdownNumbers(true)
+    if frame.cooldown.SetDrawBling then frame.cooldown:SetDrawBling(false) end
+    if frame.cooldown.SetDrawEdge then frame.cooldown:SetDrawEdge(false) end
+    if frame.cooldown.SetSwipeColor then frame.cooldown:SetSwipeColor(0, 0, 0, 0.8) end
+    frame.cooldown:Hide()
+
     frame.keybind = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
     frame.keybind:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
     frame.keybind:SetJustifyH("RIGHT")
 
-    -- TODO: GCD sweep needs SecureDelegate research
+    frame.success = frame:CreateTexture(nil, "OVERLAY")
+    frame.success:SetAllPoints()
+    frame.success:SetAtlas("UI-HUD-ActionBar-IconFrame-Mouseover")
+    frame.success:SetVertexColor(0.20, 1.00, 0.35, 1.0)
+    frame.success:SetBlendMode("ADD")
+    frame.success:Hide()
+    frame.successUntil = 0
+    frame.spellID = nil
 
     frame.border = frame:CreateTexture(nil, "OVERLAY")
     frame.border:SetAllPoints()
@@ -82,6 +113,21 @@ local function CreateIcon(index)
 
     frame:Hide()
     return frame
+end
+
+local function LayoutIcons()
+    local size = HunterFlow.GetOpt("iconSize")
+    local spacing = HunterFlow.GetOpt("iconSpacing")
+    for index, frame in ipairs(icons) do
+        frame:SetSize(size, size)
+        frame:ClearAllPoints()
+        frame:SetPoint("LEFT", container, "LEFT", (index - 1) * (size + spacing), 0)
+        if index > 1 then
+            frame:SetAlpha(0.7)
+        else
+            frame:SetAlpha(1)
+        end
+    end
 end
 
 local function EnsureIcons()
@@ -96,28 +142,112 @@ function Display:UpdateContainerSize()
     local size = HunterFlow.GetOpt("iconSize")
     local spacing = HunterFlow.GetOpt("iconSpacing")
     container:SetSize(count * size + (count - 1) * spacing, size)
+    LayoutIcons()
+end
+
+function Display:ApplyOptions()
+    self:UpdateContainerSize()
+    container:EnableMouse(not HunterFlow.GetOpt("locked"))
+end
+
+function Display:UpdateCooldown(icon, spellID)
+    if not icon or not icon.cooldown then return end
+    if not HunterFlow.GetOpt("showCooldownSwipe") or not spellID or not C_Spell_GetSpellCooldown then
+        ClearCooldown(icon)
+        return
+    end
+
+    local ok, cooldown = pcall(C_Spell_GetSpellCooldown, spellID)
+    if not ok or not cooldown then
+        ClearCooldown(icon)
+        return
+    end
+
+    local startTime = cooldown.startTime or 0
+    local duration = cooldown.duration or 0
+
+    if issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)) then
+        ClearCooldown(icon)
+        return
+    end
+
+    if startTime <= 0 or duration < MIN_COOLDOWN_SWIPE_DURATION then
+        ClearCooldown(icon)
+        return
+    end
+
+    if icon.cooldown.SetCooldown then
+        icon.cooldown:SetCooldown(startTime, duration, cooldown.modRate or 1)
+    end
+    icon.cooldown:Show()
+end
+
+function Display:UpdateCastFeedback(icon, now)
+    if not icon or not icon.success then return end
+    if not HunterFlow.GetOpt("showCastFeedback") then
+        icon.success:Hide()
+        icon.successUntil = 0
+        return
+    end
+
+    if icon.successUntil > now then
+        local remaining = icon.successUntil - now
+        icon.success:SetAlpha(remaining / SUCCESS_FLASH_DURATION)
+        icon.success:Show()
+    else
+        icon.success:Hide()
+    end
 end
 
 function Display:UpdateQueue(queue)
     EnsureIcons()
     local count = HunterFlow.GetOpt("iconCount")
+    local now = GetTime()
 
     for i = 1, count do
         local icon = icons[i]
         local spellID = queue[i]
 
         if spellID then
-            local texture = C_Spell.GetSpellTexture(spellID)
+            local texture = C_Spell_GetSpellTexture and C_Spell_GetSpellTexture(spellID)
             if texture then
                 icon.texture:SetTexture(texture)
                 local key = GetKeybindForSpell(spellID)
                 icon.keybind:SetText(key or "")
+                icon.spellID = spellID
+                self:UpdateCooldown(icon, spellID)
+                self:UpdateCastFeedback(icon, now)
                 icon:Show()
             else
+                icon.spellID = nil
+                ClearCooldown(icon)
+                icon.success:Hide()
                 icon:Hide()
             end
         else
+            icon.spellID = nil
+            ClearCooldown(icon)
+            icon.success:Hide()
             icon:Hide()
+        end
+    end
+
+    for i = count + 1, #icons do
+        local icon = icons[i]
+        icon.spellID = nil
+        ClearCooldown(icon)
+        icon.success:Hide()
+        icon:Hide()
+    end
+end
+
+function Display:OnSpellCastSucceeded(spellID)
+    if not HunterFlow.GetOpt("showCastFeedback") then return end
+    local now = GetTime()
+    for _, icon in ipairs(icons) do
+        if icon.spellID == spellID then
+            icon.successUntil = now + SUCCESS_FLASH_DURATION
+            self:UpdateCastFeedback(icon, now)
         end
     end
 end
@@ -130,7 +260,7 @@ local UPDATE_INTERVAL = 0.1
 local timeSinceUpdate = 0
 
 function Display:Enable()
-    self:UpdateContainerSize()
+    self:ApplyOptions()
     EnsureIcons()
     container:EnableMouse(not HunterFlow.GetOpt("locked"))
     container:Show()
@@ -152,3 +282,12 @@ end
 function Display:SetClickThrough(locked)
     container:EnableMouse(not locked)
 end
+
+function Display:ResetPosition()
+    container:ClearAllPoints()
+    container:SetPoint("CENTER", UIParent, "CENTER", 0, -50)
+end
+
+HunterFlow.RegisterOptCallback(function()
+    Display:ApplyOptions()
+end)

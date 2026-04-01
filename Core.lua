@@ -15,11 +15,28 @@ local DEFAULTS = {
     iconSize = 40,
     iconSpacing = 4,
     locked = false,
+    showCooldownSwipe = true,
+    showCastFeedback = true,
 }
+
+local optionCallbacks = {}
 
 function HunterFlow.GetOpt(key)
     if HunterFlowDB[key] ~= nil then return HunterFlowDB[key] end
     return DEFAULTS[key]
+end
+
+function HunterFlow.SetOpt(key, value)
+    local prev = HunterFlow.GetOpt(key)
+    if prev == value then return end
+    HunterFlowDB[key] = value
+    for _, callback in ipairs(optionCallbacks) do
+        callback(key, value, prev)
+    end
+end
+
+function HunterFlow.RegisterOptCallback(callback)
+    optionCallbacks[#optionCallbacks + 1] = callback
 end
 
 ------------------------------------------------------------------------
@@ -81,7 +98,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             local profile = Engine.activeProfile
             local name = profile and profile.id or "unknown"
             print("|cff00ff00[HunterFlow]|r loaded. Profile: " .. name)
-            print("|cffaaaaaa  /hf lock|unlock|burst|help|r")
+            print("|cffaaaaaa  /hf lock|unlock|options|burst|help|r")
         else
             local specID = GetActiveSpecID()
             if not HunterFlow.Profiles[specID or 0] then
@@ -95,6 +112,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local unit, _, spellID = ...
         if unit == "player" and spellID then
             Engine:OnSpellCast(spellID)
+            if Display and Display.OnSpellCastSucceeded then
+                Display:OnSpellCastSucceeded(spellID)
+            end
         end
 
     elseif event == "PLAYER_REGEN_DISABLED" then
@@ -132,12 +152,12 @@ SlashCmdList["HUNTERFLOW"] = function(msg)
     msg = msg:lower():trim()
 
     if msg == "lock" then
-        HunterFlowDB.locked = true
+        HunterFlow.SetOpt("locked", true)
         Display:SetClickThrough(true)
         print("|cff00ff00[HF]|r Frame locked (click-through).")
 
     elseif msg == "unlock" then
-        HunterFlowDB.locked = false
+        HunterFlow.SetOpt("locked", false)
         Display:SetClickThrough(false)
         print("|cff00ff00[HF]|r Frame unlocked. Drag to reposition.")
 
@@ -155,6 +175,13 @@ SlashCmdList["HUNTERFLOW"] = function(msg)
 
     elseif msg == "show" then
         Display:Enable()
+
+    elseif msg == "options" or msg == "config" then
+        if HunterFlow.OpenSettingsPanel then
+            HunterFlow.OpenSettingsPanel()
+        else
+            print("|cffff0000[HF]|r Settings panel unavailable.")
+        end
 
     elseif msg == "debug" then
         local queue = Engine:ComputeQueue(HunterFlow.GetOpt("iconCount"))
@@ -181,6 +208,7 @@ SlashCmdList["HUNTERFLOW"] = function(msg)
         print("|cff00ff00[HunterFlow]|r Commands:")
         print("  /hf lock    - Lock frame (click-through)")
         print("  /hf unlock  - Unlock frame for dragging")
+        print("  /hf options - Open the HunterFlow settings panel")
         print("  /hf burst   - Toggle burst mode")
         print("  /hf hide    - Hide the display")
         print("  /hf show    - Show the display")

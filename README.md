@@ -37,8 +37,11 @@ Planned direction:
 - Supports BM-specific cast-tracked state (Dark Ranger: Black Arrow, Bestial Wrath, Wailing Arrow; Pack Leader: BW management, Wild Thrash AoE)
 - Nature's Ally Kill Command weaving (both profiles)
 - Barbed Shot charge dump before Bestial Wrath (validated via `C_Spell.GetSpellCharges`)
+- Shows cast-success feedback when a displayed recommendation is actually cast
+- Supports best-effort cooldown swipes for readable non-GCD lockouts
 - Keeps interrupt logic out of the primary queue by default
 - Supports click-through while locked
+- Registers a native `HunterFlow` category in the in-game Settings UI
 
 ## Design Constraints
 
@@ -73,6 +76,7 @@ They describe the target architecture, not a claim that the current alpha is alr
 
 - `/hf lock`
 - `/hf unlock`
+- `/hf options`
 - `/hf burst`
 - `/hf hide`
 - `/hf show`
