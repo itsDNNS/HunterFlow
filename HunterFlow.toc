@@ -8,6 +8,7 @@
 Engine.lua
 Profiles/BM_DarkRanger.lua
 Profiles/BM_PackLeader.lua
-Display.lua
-SignalProbe.lua
 Core.lua
+Display.lua
+SettingsPanel.lua
+SignalProbe.lua
