@@ -200,6 +200,8 @@ end
 function Display:ApplyOptions()
     self:UpdateContainerSize()
     container:EnableMouse(not TrueShot.GetOpt("locked"))
+    container:SetScale(TrueShot.GetOpt("overlayScale") or 1.0)
+    container:SetAlpha(TrueShot.GetOpt("overlayOpacity") or 1.0)
 end
 
 function Display:UpdateCooldown(icon, spellID)
@@ -264,8 +266,34 @@ function Display:UpdateQueue(queue)
             local texture = C_Spell_GetSpellTexture and C_Spell_GetSpellTexture(spellID)
             if texture then
                 icon.texture:SetTexture(texture)
-                local key = GetKeybindForSpell(spellID)
-                icon.keybind:SetText(key or "")
+
+                -- Keybinds toggle
+                if TrueShot.GetOpt("showKeybinds") then
+                    local key = GetKeybindForSpell(spellID)
+                    icon.keybind:SetText(key or "")
+                else
+                    icon.keybind:SetText("")
+                end
+
+                -- Range indicator: desaturate when target is out of range
+                if TrueShot.GetOpt("showRangeIndicator") and i == 1 and UnitExists("target") then
+                    local outOfRange = false
+                    if C_Spell and C_Spell.IsSpellInRange then
+                        local ok, result = pcall(C_Spell.IsSpellInRange, spellID, "target")
+                        if ok and result == false then outOfRange = true end
+                    end
+                    if outOfRange then
+                        icon.texture:SetDesaturated(true)
+                        icon.texture:SetVertexColor(0.8, 0.3, 0.3)
+                    else
+                        icon.texture:SetDesaturated(false)
+                        icon.texture:SetVertexColor(1, 1, 1)
+                    end
+                else
+                    icon.texture:SetDesaturated(false)
+                    icon.texture:SetVertexColor(1, 1, 1)
+                end
+
                 icon.spellID = spellID
                 self:UpdateCooldown(icon, spellID)
                 self:UpdateCastFeedback(icon, now)
@@ -369,6 +397,13 @@ function Display:ResetPosition()
     container:SetPoint("CENTER", UIParent, "CENTER", 0, -50)
 end
 
-TrueShot.RegisterOptCallback(function()
+TrueShot.RegisterOptCallback(function(key)
     Display:ApplyOptions()
+    if key == "combatOnly" then
+        if TrueShot.GetOpt("combatOnly") and not UnitAffectingCombat("player") and not TrueShot.GetOpt("hidden") then
+            Display:Disable()
+        elseif not TrueShot.GetOpt("combatOnly") and not TrueShot.GetOpt("hidden") and TrueShot.Engine.activeProfile and C_AssistedCombat and C_AssistedCombat.IsAvailable() then
+            Display:Enable()
+        end
+    end
 end)
