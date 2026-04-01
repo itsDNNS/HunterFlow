@@ -207,7 +207,7 @@ local BM_PROFILE = {
         { type = "BLACKLIST", spellID = 883 },   -- Call Pet 1
         { type = "BLACKLIST", spellID = 982 },   -- Revive Pet
 
-        -- Counter Shot: blacklisted per user preference
+        -- Counter Shot: kept out of the primary queue by default
         { type = "BLACKLIST", spellID = 147362 }, -- Counter Shot
 
         -- Bestial Wrath: suppress from queue when recently cast (CD estimate)
@@ -634,7 +634,7 @@ SlashCmdList["HUNTERFLOW"] = function(msg)
             local usable = IsSpellCastable(id) and "usable" or "not usable"
             print("  " .. i .. ": " .. name .. " (" .. id .. ") [" .. usable .. "]")
         end
-        print("|cff00ff00[HF] Dark Ranger State:|r")
+        print("|cff00ff00[HF] BM State:|r")
         print("  BA ready: " .. tostring(DR.blackArrowReady))
         print("  Withering Fire: " .. (IsInWitheringFire()
             and string.format("%.1fs remaining", WitheringFireRemaining())
