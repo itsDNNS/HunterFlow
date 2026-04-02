@@ -391,6 +391,29 @@ function Display:UpdateCooldown(icon, spellID)
         return
     end
 
+    -- Check raw cooldown to filter GCD / very short durations
+    local shouldShow = false
+    if C_Spell_GetSpellCooldown then
+        local ok, cooldown = pcall(C_Spell_GetSpellCooldown, spellID)
+        if ok and cooldown then
+            local startTime = cooldown.startTime or 0
+            local duration = cooldown.duration or 0
+            -- If values are secret, still allow DurationObject path (it handles secrets)
+            local valuesReadable = not (issecretvalue and
+                (issecretvalue(startTime) or issecretvalue(duration)))
+            if valuesReadable then
+                shouldShow = startTime > 0 and duration >= MIN_COOLDOWN_SWIPE_DURATION
+            else
+                shouldShow = true  -- trust DurationObject to handle it
+            end
+        end
+    end
+
+    if not shouldShow then
+        ClearCooldown(icon)
+        return
+    end
+
     -- Prefer DurationObject path (secret-safe, available since build 66562)
     if C_Spell_GetSpellCooldownDuration and icon.cooldown.SetCooldownFromDurationObject then
         local ok, durObj = pcall(C_Spell_GetSpellCooldownDuration, spellID)
@@ -440,56 +463,65 @@ function Display:UpdateChargeCooldown(icon, spellID)
         return
     end
 
-    -- Read charge info for count display
-    local current, maxC
-    if C_Spell_GetSpellCharges then
-        local ok, charges = pcall(C_Spell_GetSpellCharges, spellID)
-        if ok and charges and charges.maxCharges and charges.maxCharges > 1 then
-            current = charges.currentCharges or 0
-            maxC = charges.maxCharges or 1
-            if issecretvalue and (issecretvalue(current) or issecretvalue(maxC)) then
-                -- Secret: try passthrough for display, skip edge ring
-                icon.chargeCount:SetText(current)
-                icon.chargeCount:Show()
-                icon.chargeCooldown:Hide()
-                return
-            end
-        else
-            icon.chargeCooldown:Hide()
-            if icon.chargeCount then icon.chargeCount:Hide() end
-            return
-        end
-    else
+    -- Read charge info
+    if not C_Spell_GetSpellCharges then
         icon.chargeCooldown:Hide()
         if icon.chargeCount then icon.chargeCount:Hide() end
         return
     end
 
-    -- Show charge count only when regenerating
+    local ok, charges = pcall(C_Spell_GetSpellCharges, spellID)
+    if not ok or not charges or not charges.maxCharges then
+        icon.chargeCooldown:Hide()
+        if icon.chargeCount then icon.chargeCount:Hide() end
+        return
+    end
+
+    local current = charges.currentCharges
+    local maxC = charges.maxCharges
+
+    -- Secret check before any comparison (Finding 3: maxCharges > 1
+    -- must not run on a secret value)
+    if issecretvalue and (issecretvalue(current) or issecretvalue(maxC)) then
+        -- Secret: passthrough count for display, skip edge ring
+        icon.chargeCount:SetText(current)
+        icon.chargeCount:Show()
+        icon.chargeCooldown:Hide()
+        return
+    end
+
+    if (maxC or 0) <= 1 then
+        icon.chargeCooldown:Hide()
+        if icon.chargeCount then icon.chargeCount:Hide() end
+        return
+    end
+
+    -- Show charge count and edge ring only when regenerating
     if current < maxC then
         icon.chargeCount:SetText(current)
         icon.chargeCount:Show()
 
         -- Prefer DurationObject for the edge ring (secret-safe)
         if C_Spell_GetSpellChargeDuration and icon.chargeCooldown.SetCooldownFromDurationObject then
-            local ok, durObj = pcall(C_Spell_GetSpellChargeDuration, spellID)
-            if ok and durObj then
+            local durOk, durObj = pcall(C_Spell_GetSpellChargeDuration, spellID)
+            if durOk and durObj then
                 icon.chargeCooldown:SetCooldownFromDurationObject(durObj)
                 icon.chargeCooldown:Show()
                 return
             end
         end
 
-        -- Fallback: direct SetCooldown from charge info
-        local ok, charges = pcall(C_Spell_GetSpellCharges, spellID)
-        if ok and charges and charges.cooldownStartTime and charges.cooldownDuration then
+        -- Fallback: direct SetCooldown with secret guards (Finding 2)
+        local startTime = charges.cooldownStartTime
+        local duration = charges.cooldownDuration
+        if startTime and duration then
+            if issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)) then
+                icon.chargeCooldown:Hide()
+                return
+            end
             local modRate = charges.chargeModRate or 1.0
             if issecretvalue and issecretvalue(modRate) then modRate = 1.0 end
-            icon.chargeCooldown:SetCooldown(
-                charges.cooldownStartTime,
-                charges.cooldownDuration,
-                modRate
-            )
+            icon.chargeCooldown:SetCooldown(startTime, duration, modRate)
             icon.chargeCooldown:Show()
         else
             icon.chargeCooldown:Hide()
