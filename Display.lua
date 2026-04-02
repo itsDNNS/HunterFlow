@@ -43,7 +43,6 @@ container:SetBackdropBorderColor(0.55, 0.55, 0.55, 0.95)
 
 local content = CreateFrame("Frame", nil, container)
 content:SetPoint("TOPLEFT", container, "TOPLEFT", CONTAINER_PADDING_X, -CONTAINER_PADDING_Y)
-content:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -CONTAINER_PADDING_X, CONTAINER_PADDING_Y)
 
 Display.container = container
 container:Hide()
@@ -186,18 +185,45 @@ local function CreateIcon(index)
     return frame
 end
 
+local ORIENTATION_CONFIG = {
+    LEFT  = { anchor = "LEFT",   axis = "x", sign =  1 },
+    RIGHT = { anchor = "RIGHT",  axis = "x", sign = -1 },
+    UP    = { anchor = "BOTTOM", axis = "y", sign =  1 },
+    DOWN  = { anchor = "TOP",    axis = "y", sign = -1 },
+}
+
 local function LayoutIcons()
     local size = TrueShot.GetOpt("iconSize")
     local spacing = TrueShot.GetOpt("iconSpacing")
+    local firstScale = TrueShot.GetOpt("firstIconScale") or 1.3
+    local orient = TrueShot.GetOpt("orientation") or "LEFT"
+    local cfg = ORIENTATION_CONFIG[orient] or ORIENTATION_CONFIG.LEFT
+
+    local effectiveFirst = size * firstScale
+
     for index, frame in ipairs(icons) do
         frame:SetSize(size, size)
         frame:ClearAllPoints()
-        frame:SetPoint("LEFT", content, "LEFT", (index - 1) * (size + spacing), 0)
-        if index > 1 then
-            frame:SetAlpha(0.7)
-        else
+
+        local isFirst = (index == 1)
+        frame:SetScale(isFirst and firstScale or 1.0)
+
+        if isFirst then
             frame:SetAlpha(1)
+        else
+            frame:SetAlpha(0.7)
         end
+
+        local offset
+        if isFirst then
+            offset = 0
+        else
+            offset = effectiveFirst + spacing + (index - 2) * (size + spacing)
+        end
+
+        local dx = cfg.axis == "x" and (offset * cfg.sign) or 0
+        local dy = cfg.axis == "y" and (offset * cfg.sign) or 0
+        frame:SetPoint(cfg.anchor, content, cfg.anchor, dx, dy)
     end
 end
 
@@ -212,12 +238,44 @@ function Display:UpdateContainerSize()
     local count = TrueShot.GetOpt("iconCount")
     local size = TrueShot.GetOpt("iconSize")
     local spacing = TrueShot.GetOpt("iconSpacing")
-    local width = count * size + (count - 1) * spacing
-    container:SetSize(
-        width + (CONTAINER_PADDING_X * 2),
-        size + (CONTAINER_PADDING_Y * 2)
-    )
-    content:SetSize(width, size)
+    local firstScale = TrueShot.GetOpt("firstIconScale") or 1.3
+    local orient = TrueShot.GetOpt("orientation") or "LEFT"
+    local isVertical = (orient == "UP" or orient == "DOWN")
+
+    local effectiveFirst = size * firstScale
+    local totalLength = effectiveFirst + (count - 1) * size + (count - 1) * spacing
+    local thickness = math.max(effectiveFirst, size)
+
+    local w, h
+    if isVertical then
+        w = thickness + (CONTAINER_PADDING_X * 2)
+        h = totalLength + (CONTAINER_PADDING_Y * 2)
+    else
+        w = totalLength + (CONTAINER_PADDING_X * 2)
+        h = thickness + (CONTAINER_PADDING_Y * 2)
+    end
+    container:SetSize(w, h)
+
+    if isVertical then
+        content:SetSize(thickness, totalLength)
+    else
+        content:SetSize(totalLength, thickness)
+    end
+
+    reasonText:ClearAllPoints()
+    phaseText:ClearAllPoints()
+    if isVertical then
+        reasonText:SetPoint("LEFT", container, "RIGHT", 4, 0)
+        reasonText:SetJustifyH("LEFT")
+        phaseText:SetPoint("RIGHT", container, "LEFT", -4, 0)
+        phaseText:SetJustifyH("RIGHT")
+    else
+        reasonText:SetPoint("TOP", container, "BOTTOM", 0, -2)
+        reasonText:SetJustifyH("CENTER")
+        phaseText:SetPoint("BOTTOM", container, "TOP", 0, 2)
+        phaseText:SetJustifyH("CENTER")
+    end
+
     LayoutIcons()
 end
 
