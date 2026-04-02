@@ -688,7 +688,7 @@ function Display:Enable()
     EnsureIcons()
     container:EnableMouse(not TrueShot.GetOpt("locked"))
     container:Show()
-    timeSinceUpdate = COMBAT_INTERVAL  -- force immediate first update
+    timeSinceUpdate = IDLE_INTERVAL  -- force immediate first update in any tier
     container:SetScript("OnUpdate", function(_, elapsed)
         timeSinceUpdate = timeSinceUpdate + elapsed
 
