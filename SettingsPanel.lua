@@ -165,10 +165,17 @@ local function CreateSettingsPanel()
         rangeDesc, "showWhyOverlay"
     )
 
+    local backdropCheck, backdropDesc = CreateCheckbox(
+        panel,
+        "Show Backdrop",
+        "Show the dark background behind the queue overlay.",
+        whyDesc, "showBackdrop"
+    )
+
     -- Utility
     local unlockButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     unlockButton:SetSize(160, 24)
-    unlockButton:SetPoint("TOPLEFT", whyDesc, "BOTTOMLEFT", 0, -18)
+    unlockButton:SetPoint("TOPLEFT", backdropDesc, "BOTTOMLEFT", 0, -18)
     unlockButton:SetText("Unlock And Recenter")
     unlockButton:SetScript("OnClick", function()
         TrueShot.SetOpt("locked", false)
@@ -196,6 +203,7 @@ local function CreateSettingsPanel()
         keybindCheck.sync()
         rangeCheck.sync()
         whyCheck.sync()
+        backdropCheck.sync()
     end)
 
     return panel

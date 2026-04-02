@@ -226,6 +226,14 @@ function Display:ApplyOptions()
     container:EnableMouse(not TrueShot.GetOpt("locked"))
     container:SetScale(TrueShot.GetOpt("overlayScale") or 1.0)
     container:SetAlpha(TrueShot.GetOpt("overlayOpacity") or 1.0)
+
+    if TrueShot.GetOpt("showBackdrop") then
+        container:SetBackdropColor(0.04, 0.04, 0.04, 0.92)
+        container:SetBackdropBorderColor(0.55, 0.55, 0.55, 0.95)
+    else
+        container:SetBackdropColor(0, 0, 0, 0)
+        container:SetBackdropBorderColor(0, 0, 0, 0)
+    end
 end
 
 function Display:UpdateCooldown(icon, spellID)
