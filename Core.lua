@@ -157,21 +157,27 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local unit, _, spellID = ...
         if unit == "player" and spellID then
             Engine:OnSpellCast(spellID)
-            if Display and Display.OnSpellCastSucceeded then
-                Display:OnSpellCastSucceeded(spellID)
+            if Display then
+                if Display.OnSpellCastSucceeded then
+                    Display:OnSpellCastSucceeded(spellID)
+                end
+                if Display.MarkDirty then Display:MarkDirty() end
             end
         end
 
     elseif event == "PLAYER_REGEN_DISABLED" then
         Engine.combatStartTime = GetTime()
+        if Display and Display.MarkDirty then Display:MarkDirty() end
         ReconcileVisibility()
 
     elseif event == "PLAYER_REGEN_ENABLED" then
         Engine.combatStartTime = nil
         Engine:OnCombatEnd()
+        if Display and Display.MarkDirty then Display:MarkDirty() end
         ReconcileVisibility()
 
     elseif event == "PLAYER_TARGET_CHANGED" then
+        if Display and Display.MarkDirty then Display:MarkDirty() end
         ReconcileVisibility()
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED"

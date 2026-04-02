@@ -668,24 +668,48 @@ function Display:OnSpellCastSucceeded(spellID)
 end
 
 ------------------------------------------------------------------------
--- Update throttle
+-- Update throttle (tiered: combat 10Hz, idle 2Hz, hidden 0Hz)
 ------------------------------------------------------------------------
 
-local UPDATE_INTERVAL = 0.1
+local COMBAT_INTERVAL = 0.1      -- 10 Hz in combat
+local IDLE_INTERVAL = 0.5        -- 2 Hz out of combat with no target
 local timeSinceUpdate = 0
+local queueDirty = true           -- force first update
+
+function Display:MarkDirty()
+    queueDirty = true
+end
+
+local UnitAffectingCombat = UnitAffectingCombat
+local UnitExists = UnitExists
 
 function Display:Enable()
     self:ApplyOptions()
     EnsureIcons()
     container:EnableMouse(not TrueShot.GetOpt("locked"))
     container:Show()
+    queueDirty = true
     container:SetScript("OnUpdate", function(_, elapsed)
         timeSinceUpdate = timeSinceUpdate + elapsed
-        if timeSinceUpdate < UPDATE_INTERVAL then return end
+
+        -- Hidden early exit: skip all work if container not visible
+        if not container:IsShown() then return end
+
+        -- Tiered rate: combat = 10Hz, idle = 2Hz
+        local inCombat = UnitAffectingCombat("player")
+        local hasTarget = UnitExists("target")
+        local interval = (inCombat or hasTarget) and COMBAT_INTERVAL or IDLE_INTERVAL
+
+        if timeSinceUpdate < interval then return end
         timeSinceUpdate = 0
+
+        -- Dirty flag: skip ComputeQueue if nothing changed (idle optimization)
+        -- Always compute in combat (AC recommendations change continuously)
+        if not inCombat and not queueDirty then return end
 
         local queue = Engine:ComputeQueue(TrueShot.GetOpt("iconCount"))
         Display:UpdateQueue(queue)
+        queueDirty = false
     end)
 end
 
