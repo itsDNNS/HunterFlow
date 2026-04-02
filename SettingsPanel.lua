@@ -165,10 +165,64 @@ local function CreateSettingsPanel()
         rangeDesc, "showWhyOverlay"
     )
 
+    local backdropCheck, backdropDesc = CreateCheckbox(
+        panel,
+        "Show Backdrop",
+        "Show the dark background behind the queue overlay.",
+        whyDesc, "showBackdrop"
+    )
+
+    -- Orientation
+    local orientLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    orientLabel:SetPoint("TOPLEFT", backdropDesc, "BOTTOMLEFT", 0, -18)
+    orientLabel:SetText("Queue Orientation")
+
+    local orientDropdown = CreateFrame("Frame", "TrueShotOrientDropdown", panel,
+        "UIDropDownMenuTemplate")
+    orientDropdown:SetPoint("TOPLEFT", orientLabel, "BOTTOMLEFT", -16, -4)
+    UIDropDownMenu_SetWidth(orientDropdown, 120)
+
+    local orientOptions = { "LEFT", "RIGHT", "UP", "DOWN" }
+    UIDropDownMenu_Initialize(orientDropdown, function(self, level)
+        for _, opt in ipairs(orientOptions) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt
+            info.checked = (TrueShot.GetOpt("orientation") == opt)
+            info.func = function()
+                TrueShot.SetOpt("orientation", opt)
+                UIDropDownMenu_SetText(orientDropdown, opt)
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    UIDropDownMenu_SetText(orientDropdown, TrueShot.GetOpt("orientation"))
+
+    -- First Icon Scale
+    local fisLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    fisLabel:SetPoint("TOPLEFT", orientDropdown, "BOTTOMLEFT", 16, -18)
+    fisLabel:SetText("First Icon Scale")
+
+    local fisSlider = CreateFrame("Slider", "TrueShotFirstIconScale", panel,
+        "OptionsSliderTemplate")
+    fisSlider:SetPoint("TOPLEFT", fisLabel, "BOTTOMLEFT", 0, -12)
+    fisSlider:SetSize(180, 16)
+    fisSlider:SetMinMaxValues(1.0, 2.0)
+    fisSlider:SetValueStep(0.1)
+    fisSlider:SetObeyStepOnDrag(true)
+    fisSlider:SetValue(TrueShot.GetOpt("firstIconScale"))
+    fisSlider.Low:SetText("1.0")
+    fisSlider.High:SetText("2.0")
+    fisSlider.Text:SetText(string.format("%.1f", TrueShot.GetOpt("firstIconScale")))
+    fisSlider:SetScript("OnValueChanged", function(self, value)
+        value = math.floor(value * 10 + 0.5) / 10
+        TrueShot.SetOpt("firstIconScale", value)
+        self.Text:SetText(string.format("%.1f", value))
+    end)
+
     -- Utility
     local unlockButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     unlockButton:SetSize(160, 24)
-    unlockButton:SetPoint("TOPLEFT", whyDesc, "BOTTOMLEFT", 0, -18)
+    unlockButton:SetPoint("TOPLEFT", fisSlider, "BOTTOMLEFT", 0, -18)
     unlockButton:SetText("Unlock And Recenter")
     unlockButton:SetScript("OnClick", function()
         TrueShot.SetOpt("locked", false)
@@ -196,6 +250,11 @@ local function CreateSettingsPanel()
         keybindCheck.sync()
         rangeCheck.sync()
         whyCheck.sync()
+        backdropCheck.sync()
+        UIDropDownMenu_SetText(orientDropdown, TrueShot.GetOpt("orientation"))
+        local fis = TrueShot.GetOpt("firstIconScale") or 1.3
+        fisSlider:SetValue(fis)
+        fisSlider.Text:SetText(string.format("%.1f", fis))
     end)
 
     return panel

@@ -4,6 +4,10 @@ local Engine = TrueShot.Engine
 local GetTime = GetTime
 local C_Spell_GetSpellTexture = C_Spell and C_Spell.GetSpellTexture
 local C_Spell_GetSpellCooldown = C_Spell and C_Spell.GetSpellCooldown
+local C_Spell_GetSpellCharges = C_Spell and C_Spell.GetSpellCharges
+
+local Masque = _G.LibStub and _G.LibStub("Masque", true)
+local MasqueGroup = Masque and Masque:Group("TrueShot", "Queue")
 
 TrueShot.Display = {}
 local Display = TrueShot.Display
@@ -43,7 +47,6 @@ container:SetBackdropBorderColor(0.55, 0.55, 0.55, 0.95)
 
 local content = CreateFrame("Frame", nil, container)
 content:SetPoint("TOPLEFT", container, "TOPLEFT", CONTAINER_PADDING_X, -CONTAINER_PADDING_Y)
-content:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -CONTAINER_PADDING_X, CONTAINER_PADDING_Y)
 
 Display.container = container
 container:Hide()
@@ -67,6 +70,17 @@ phaseText:Hide()
 ------------------------------------------------------------------------
 
 local icons = {}
+
+if MasqueGroup then
+    MasqueGroup:RegisterCallback(function()
+        for _, icon in ipairs(icons) do
+            if icon.keybind then
+                icon.keybind:ClearAllPoints()
+                icon.keybind:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -2, -2)
+            end
+        end
+    end)
+end
 
 local function ClearCooldown(icon)
     if not icon or not icon.cooldown then return end
@@ -161,6 +175,23 @@ local function CreateIcon(index)
     if frame.cooldown.SetSwipeColor then frame.cooldown:SetSwipeColor(0, 0, 0, 0.8) end
     frame.cooldown:Hide()
 
+    -- Charge cooldown: renders beneath primary CD for charge-based spells
+    frame.chargeCooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+    frame.chargeCooldown:ClearAllPoints()
+    frame.chargeCooldown:SetPoint("TOPLEFT", frame, "TOPLEFT", ICON_TEXTURE_INSET, -ICON_TEXTURE_INSET)
+    frame.chargeCooldown:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -ICON_TEXTURE_INSET, ICON_TEXTURE_INSET)
+    frame.chargeCooldown:SetHideCountdownNumbers(true)
+    if frame.chargeCooldown.SetDrawBling then frame.chargeCooldown:SetDrawBling(false) end
+    if frame.chargeCooldown.SetDrawEdge then frame.chargeCooldown:SetDrawEdge(false) end
+    if frame.chargeCooldown.SetSwipeColor then frame.chargeCooldown:SetSwipeColor(0, 0, 0, 0.4) end
+    frame.chargeCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() - 1)
+    frame.chargeCooldown:Hide()
+
+    frame.chargeCount = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+    frame.chargeCount:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+    frame.chargeCount:SetJustifyH("RIGHT")
+    frame.chargeCount:Hide()
+
     frame.keybind = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
     frame.keybind:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
     frame.keybind:SetJustifyH("RIGHT")
@@ -178,6 +209,37 @@ local function CreateIcon(index)
     frame.border:SetAllPoints()
     frame.border:SetAtlas("UI-HUD-ActionBar-IconFrame")
 
+    -- Override glow: pulsing overlay when TrueShot overrides AC
+    frame.glow = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    frame.glow:SetAllPoints()
+    frame.glow:SetAtlas("UI-HUD-ActionBar-IconFrame-Mouseover")
+    frame.glow:SetBlendMode("ADD")
+    frame.glow:SetAlpha(0)
+    frame.glow:Hide()
+
+    frame.glowAnim = frame.glow:CreateAnimationGroup()
+    frame.glowAnim:SetLooping("BOUNCE")
+    local fadeIn = frame.glowAnim:CreateAnimation("Alpha")
+    fadeIn:SetFromAlpha(0.3)
+    fadeIn:SetToAlpha(0.9)
+    fadeIn:SetDuration(0.4)
+    fadeIn:SetOrder(1)
+    fadeIn:SetSmoothing("IN_OUT")
+
+    if MasqueGroup then
+        -- Masque owns background and border; hide native versions
+        frame.slotBackground:Hide()
+        frame.border:Hide()
+
+        MasqueGroup:AddButton(frame, {
+            Icon = frame.texture,
+            Cooldown = frame.cooldown,
+            ChargeCooldown = frame.chargeCooldown,
+            HotKey = frame.keybind,
+            Normal = frame.border,
+        }, "Frame")
+    end
+
     if index > 1 then
         frame:SetAlpha(0.7)
     end
@@ -186,18 +248,70 @@ local function CreateIcon(index)
     return frame
 end
 
+local GLOW_COLORS = {
+    pin    = { 0.0, 0.8, 1.0 },
+    prefer = { 0.4, 0.6, 1.0 },
+}
+
+local function HideGlow(icon)
+    if not icon or not icon.glow then return end
+    icon.glowAnim:Stop()
+    icon.glow:Hide()
+end
+
+local function ShowGlow(icon, source)
+    if not icon or not icon.glow then return end
+    local color = GLOW_COLORS[source]
+    if not color then
+        HideGlow(icon)
+        return
+    end
+    icon.glow:SetVertexColor(color[1], color[2], color[3], 1.0)
+    icon.glow:Show()
+    if not icon.glowAnim:IsPlaying() then
+        icon.glowAnim:Play()
+    end
+end
+
+local ORIENTATION_CONFIG = {
+    LEFT  = { anchor = "LEFT",   axis = "x", sign =  1 },
+    RIGHT = { anchor = "RIGHT",  axis = "x", sign = -1 },
+    UP    = { anchor = "BOTTOM", axis = "y", sign =  1 },
+    DOWN  = { anchor = "TOP",    axis = "y", sign = -1 },
+}
+
 local function LayoutIcons()
     local size = TrueShot.GetOpt("iconSize")
     local spacing = TrueShot.GetOpt("iconSpacing")
+    local firstScale = TrueShot.GetOpt("firstIconScale") or 1.3
+    local orient = TrueShot.GetOpt("orientation") or "LEFT"
+    local cfg = ORIENTATION_CONFIG[orient] or ORIENTATION_CONFIG.LEFT
+
+    local effectiveFirst = size * firstScale
+
     for index, frame in ipairs(icons) do
         frame:SetSize(size, size)
         frame:ClearAllPoints()
-        frame:SetPoint("LEFT", content, "LEFT", (index - 1) * (size + spacing), 0)
-        if index > 1 then
-            frame:SetAlpha(0.7)
-        else
+
+        local isFirst = (index == 1)
+        frame:SetScale(isFirst and firstScale or 1.0)
+
+        if isFirst then
             frame:SetAlpha(1)
+        else
+            frame:SetAlpha(0.7)
         end
+
+        local offset
+        if isFirst then
+            offset = 0
+        else
+            offset = effectiveFirst + spacing + (index - 2) * (size + spacing)
+        end
+
+        local dx = cfg.axis == "x" and (offset * cfg.sign) or 0
+        local dy = cfg.axis == "y" and (offset * cfg.sign) or 0
+        frame:SetPoint(cfg.anchor, content, cfg.anchor, dx, dy)
     end
 end
 
@@ -212,12 +326,44 @@ function Display:UpdateContainerSize()
     local count = TrueShot.GetOpt("iconCount")
     local size = TrueShot.GetOpt("iconSize")
     local spacing = TrueShot.GetOpt("iconSpacing")
-    local width = count * size + (count - 1) * spacing
-    container:SetSize(
-        width + (CONTAINER_PADDING_X * 2),
-        size + (CONTAINER_PADDING_Y * 2)
-    )
-    content:SetSize(width, size)
+    local firstScale = TrueShot.GetOpt("firstIconScale") or 1.3
+    local orient = TrueShot.GetOpt("orientation") or "LEFT"
+    local isVertical = (orient == "UP" or orient == "DOWN")
+
+    local effectiveFirst = size * firstScale
+    local totalLength = effectiveFirst + (count - 1) * size + (count - 1) * spacing
+    local thickness = math.max(effectiveFirst, size)
+
+    local w, h
+    if isVertical then
+        w = thickness + (CONTAINER_PADDING_X * 2)
+        h = totalLength + (CONTAINER_PADDING_Y * 2)
+    else
+        w = totalLength + (CONTAINER_PADDING_X * 2)
+        h = thickness + (CONTAINER_PADDING_Y * 2)
+    end
+    container:SetSize(w, h)
+
+    if isVertical then
+        content:SetSize(thickness, totalLength)
+    else
+        content:SetSize(totalLength, thickness)
+    end
+
+    reasonText:ClearAllPoints()
+    phaseText:ClearAllPoints()
+    if isVertical then
+        reasonText:SetPoint("LEFT", container, "RIGHT", 4, -8)
+        reasonText:SetJustifyH("LEFT")
+        phaseText:SetPoint("LEFT", container, "RIGHT", 4, 8)
+        phaseText:SetJustifyH("LEFT")
+    else
+        reasonText:SetPoint("TOP", container, "BOTTOM", 0, -2)
+        reasonText:SetJustifyH("CENTER")
+        phaseText:SetPoint("BOTTOM", container, "TOP", 0, 2)
+        phaseText:SetJustifyH("CENTER")
+    end
+
     LayoutIcons()
 end
 
@@ -226,6 +372,14 @@ function Display:ApplyOptions()
     container:EnableMouse(not TrueShot.GetOpt("locked"))
     container:SetScale(TrueShot.GetOpt("overlayScale") or 1.0)
     container:SetAlpha(TrueShot.GetOpt("overlayOpacity") or 1.0)
+
+    if TrueShot.GetOpt("showBackdrop") then
+        container:SetBackdropColor(0.04, 0.04, 0.04, 0.92)
+        container:SetBackdropBorderColor(0.55, 0.55, 0.55, 0.95)
+    else
+        container:SetBackdropColor(0, 0, 0, 0)
+        container:SetBackdropBorderColor(0, 0, 0, 0)
+    end
 end
 
 function Display:UpdateCooldown(icon, spellID)
@@ -258,6 +412,47 @@ function Display:UpdateCooldown(icon, spellID)
         icon.cooldown:SetCooldown(startTime, duration, cooldown.modRate or 1)
     end
     icon.cooldown:Show()
+end
+
+function Display:UpdateChargeCooldown(icon, spellID)
+    if not icon or not icon.chargeCooldown then return end
+    if not TrueShot.GetOpt("showCooldownSwipe") or not spellID or not C_Spell_GetSpellCharges then
+        icon.chargeCooldown:Hide()
+        if icon.chargeCount then icon.chargeCount:Hide() end
+        return
+    end
+
+    local ok, charges = pcall(C_Spell_GetSpellCharges, spellID)
+    if not ok or not charges or not charges.maxCharges or charges.maxCharges <= 1 then
+        icon.chargeCooldown:Hide()
+        if icon.chargeCount then icon.chargeCount:Hide() end
+        return
+    end
+
+    local current = charges.currentCharges or 0
+    local maxC = charges.maxCharges or 1
+
+    if issecretvalue and (issecretvalue(current) or issecretvalue(maxC)) then
+        icon.chargeCooldown:Hide()
+        if icon.chargeCount then icon.chargeCount:Hide() end
+        return
+    end
+
+    if current < maxC and charges.cooldownStartTime and charges.cooldownDuration then
+        icon.chargeCount:SetText(current)
+        icon.chargeCount:Show()
+        local modRate = charges.chargeModRate or 1.0
+        if issecretvalue and issecretvalue(modRate) then modRate = 1.0 end
+        icon.chargeCooldown:SetCooldown(
+            charges.cooldownStartTime,
+            charges.cooldownDuration,
+            modRate
+        )
+        icon.chargeCooldown:Show()
+    else
+        icon.chargeCooldown:Hide()
+        icon.chargeCount:Hide()
+    end
 end
 
 function Display:UpdateCastFeedback(icon, now)
@@ -320,17 +515,22 @@ function Display:UpdateQueue(queue)
 
                 icon.spellID = spellID
                 self:UpdateCooldown(icon, spellID)
+                self:UpdateChargeCooldown(icon, spellID)
                 self:UpdateCastFeedback(icon, now)
                 icon:Show()
             else
                 icon.spellID = nil
                 ClearCooldown(icon)
+                if icon.chargeCooldown then icon.chargeCooldown:Hide() end
+                if icon.chargeCount then icon.chargeCount:Hide() end
                 icon.success:Hide()
                 icon:Hide()
             end
         else
             icon.spellID = nil
             ClearCooldown(icon)
+            if icon.chargeCooldown then icon.chargeCooldown:Hide() end
+            if icon.chargeCount then icon.chargeCount:Hide() end
             icon.success:Hide()
             icon:Hide()
         end
@@ -340,6 +540,8 @@ function Display:UpdateQueue(queue)
         local icon = icons[i]
         icon.spellID = nil
         ClearCooldown(icon)
+        if icon.chargeCooldown then icon.chargeCooldown:Hide() end
+        if icon.chargeCount then icon.chargeCount:Hide() end
         icon.success:Hide()
         icon:Hide()
     end
@@ -362,15 +564,18 @@ function Display:UpdateQueue(queue)
         phaseText:Hide()
     end
 
-    -- Override indicator: tint primary icon border when TrueShot overrides AC
-    if TrueShot.GetOpt("showOverrideIndicator") and icons[1] and icons[1].border then
-        if meta and (meta.source == "pin" or meta.source == "prefer") then
-            icons[1].border:SetVertexColor(0.30, 0.85, 1.0, 1.0)
-        else
-            icons[1].border:SetVertexColor(1.0, 1.0, 1.0, 1.0)
-        end
-    elseif icons[1] and icons[1].border then
+    -- Override glow: pulse position 1 when TrueShot overrides AC
+    if icons[1] and icons[1].border then
         icons[1].border:SetVertexColor(1.0, 1.0, 1.0, 1.0)
+    end
+    if TrueShot.GetOpt("showOverrideIndicator") and icons[1] then
+        if meta and (meta.source == "pin" or meta.source == "prefer") then
+            ShowGlow(icons[1], meta.source)
+        else
+            HideGlow(icons[1])
+        end
+    elseif icons[1] then
+        HideGlow(icons[1])
     end
 end
 
