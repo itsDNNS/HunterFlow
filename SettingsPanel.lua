@@ -87,97 +87,110 @@ local function CreateSettingsPanel()
     panel.name = "TrueShot"
     panel:SetSize(640, 800)
 
-    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")
-    title:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -16)
+    -- ScrollFrame wrapping all content
+    local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 0)
+
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetWidth(scrollFrame:GetWidth())
+    scrollChild:SetHeight(1) -- will be updated after all controls are placed
+    scrollFrame:SetScrollChild(scrollChild)
+
+    -- All controls parent to scrollChild instead of panel
+    local content = scrollChild
+
+    local title = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")
+    title:SetPoint("TOPLEFT", content, "TOPLEFT", 16, -16)
     title:SetText("TrueShot")
 
-    local subtitle = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local subtitle = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    subtitle:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
+    subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
     subtitle:SetJustifyH("LEFT")
     subtitle:SetText("Midnight-compatible rotation overlay on top of Blizzard Assisted Combat.")
 
     -- Display
     local lockCheck, lockDesc = CreateCheckbox(
-        panel,
+        content,
         "Lock overlay frame",
         "Disable dragging and make the overlay click-through.",
         subtitle, "locked"
     )
 
     local enemyCheck, enemyDesc = CreateCheckbox(
-        panel,
+        content,
         "Show only on enemy target",
         "Show the overlay only when you have a hostile target selected. Implies combat-only behavior.",
         lockDesc, "enemyTargetOnly"
     )
 
     local combatCheck, combatDesc = CreateCheckbox(
-        panel,
+        content,
         "Show only in combat",
         "Hide the overlay outside of combat. Ignored when 'Show only on enemy target' is active.",
         enemyDesc, "combatOnly"
     )
 
     local scaleSlider, scaleDesc = CreateSlider(
-        panel, "Overlay scale", "Size of the overlay icons.",
+        content, "Overlay scale", "Size of the overlay icons.",
         combatDesc, "overlayScale", 0.5, 2.0, 0.1
     )
 
     local opacitySlider, opacityDesc = CreateSlider(
-        panel, "Overlay opacity", "Transparency of the overlay.",
+        content, "Overlay opacity", "Transparency of the overlay.",
         scaleDesc, "overlayOpacity", 0.3, 1.0, 0.1
     )
 
     -- Features
     local castCheck, castDesc = CreateCheckbox(
-        panel,
+        content,
         "Show cast success feedback",
         "Flash the icon briefly when your cast matches the recommendation.",
         opacityDesc, "showCastFeedback"
     )
 
     local cooldownCheck, cooldownDesc = CreateCheckbox(
-        panel,
+        content,
         "Show cooldown swipes (best-effort)",
         "Display cooldown sweep when readable. Not a promise of exact Midnight cooldown truth.",
         castDesc, "showCooldownSwipe"
     )
 
     local keybindCheck, keybindDesc = CreateCheckbox(
-        panel,
+        content,
         "Show keybindings",
         "Display the keybinding text on each icon.",
         cooldownDesc, "showKeybinds"
     )
 
     local rangeCheck, rangeDesc = CreateCheckbox(
-        panel,
+        content,
         "Show range indicator",
         "Tint the primary icon red when your target is out of range.",
         keybindDesc, "showRangeIndicator"
     )
 
     local whyCheck, whyDesc = CreateCheckbox(
-        panel,
+        content,
         "Show recommendation reason",
         "Display a label below the primary icon explaining why it was recommended (e.g. Withering Fire, Charge Dump).",
         rangeDesc, "showWhyOverlay"
     )
 
     local backdropCheck, backdropDesc = CreateCheckbox(
-        panel,
+        content,
         "Show Backdrop",
         "Show the dark background behind the queue overlay.",
         whyDesc, "showBackdrop"
     )
 
     -- Orientation
-    local orientLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local orientLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     orientLabel:SetPoint("TOPLEFT", backdropDesc, "BOTTOMLEFT", 0, -18)
     orientLabel:SetText("Queue Orientation")
 
-    local orientDropdown = CreateFrame("Frame", "TrueShotOrientDropdown", panel,
+    local orientDropdown = CreateFrame("Frame", "TrueShotOrientDropdown", content,
         "UIDropDownMenuTemplate")
     orientDropdown:SetPoint("TOPLEFT", orientLabel, "BOTTOMLEFT", -16, -4)
     UIDropDownMenu_SetWidth(orientDropdown, 120)
@@ -198,11 +211,11 @@ local function CreateSettingsPanel()
     UIDropDownMenu_SetText(orientDropdown, TrueShot.GetOpt("orientation"))
 
     -- First Icon Scale
-    local fisLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local fisLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     fisLabel:SetPoint("TOPLEFT", orientDropdown, "BOTTOMLEFT", 16, -18)
     fisLabel:SetText("First Icon Scale")
 
-    local fisSlider = CreateFrame("Slider", "TrueShotFirstIconScale", panel,
+    local fisSlider = CreateFrame("Slider", "TrueShotFirstIconScale", content,
         "OptionsSliderTemplate")
     fisSlider:SetPoint("TOPLEFT", fisLabel, "BOTTOMLEFT", 0, -12)
     fisSlider:SetSize(180, 16)
@@ -220,7 +233,7 @@ local function CreateSettingsPanel()
     end)
 
     -- Utility
-    local unlockButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    local unlockButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
     unlockButton:SetSize(160, 24)
     unlockButton:SetPoint("TOPLEFT", fisSlider, "BOTTOMLEFT", 0, -18)
     unlockButton:SetText("Unlock And Recenter")
@@ -233,11 +246,25 @@ local function CreateSettingsPanel()
         lockCheck:SetChecked(false)
     end)
 
-    local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    local hint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     hint:SetPoint("TOPLEFT", unlockButton, "BOTTOMLEFT", 0, -10)
-    hint:SetPoint("RIGHT", panel, "RIGHT", -24, 0)
+    hint:SetPoint("RIGHT", content, "RIGHT", -24, 0)
     hint:SetJustifyH("LEFT")
     hint:SetText("For diagnostics and debugging, use /ts debug and /ts probe commands.")
+
+    -- Set scroll child height to fit all controls (measured from top to hint bottom + padding)
+    scrollChild:SetScript("OnShow", function(self)
+        C_Timer.After(0, function()
+            local bottom = hint:GetBottom()
+            local top = content:GetTop()
+            if bottom and top then
+                self:SetHeight(top - bottom + 30)
+            else
+                self:SetHeight(1200)
+            end
+        end)
+    end)
+    scrollChild:SetHeight(1200) -- safe initial height
 
     panel:SetScript("OnShow", function()
         lockCheck.sync()
