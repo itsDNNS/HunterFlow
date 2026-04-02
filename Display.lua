@@ -5,6 +5,8 @@ local GetTime = GetTime
 local C_Spell_GetSpellTexture = C_Spell and C_Spell.GetSpellTexture
 local C_Spell_GetSpellCooldown = C_Spell and C_Spell.GetSpellCooldown
 local C_Spell_GetSpellCharges = C_Spell and C_Spell.GetSpellCharges
+local C_Spell_GetSpellCooldownDuration = C_Spell and C_Spell.GetSpellCooldownDuration
+local C_Spell_GetSpellChargeDuration = C_Spell and C_Spell.GetSpellChargeDuration
 
 local Masque = _G.LibStub and _G.LibStub("Masque", true)
 local MasqueGroup = Masque and Masque:Group("TrueShot", "Queue")
@@ -172,19 +174,19 @@ local function CreateIcon(index)
     frame.cooldown:SetHideCountdownNumbers(true)
     if frame.cooldown.SetDrawBling then frame.cooldown:SetDrawBling(false) end
     if frame.cooldown.SetDrawEdge then frame.cooldown:SetDrawEdge(false) end
-    if frame.cooldown.SetSwipeColor then frame.cooldown:SetSwipeColor(0, 0, 0, 0.8) end
+    if frame.cooldown.SetSwipeColor then frame.cooldown:SetSwipeColor(0, 0, 0, 0.6) end
     frame.cooldown:Hide()
 
-    -- Charge cooldown: renders beneath primary CD for charge-based spells
+    -- Charge cooldown: edge ring above primary CD for charge-based spells
     frame.chargeCooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.chargeCooldown:ClearAllPoints()
     frame.chargeCooldown:SetPoint("TOPLEFT", frame, "TOPLEFT", ICON_TEXTURE_INSET, -ICON_TEXTURE_INSET)
     frame.chargeCooldown:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -ICON_TEXTURE_INSET, ICON_TEXTURE_INSET)
     frame.chargeCooldown:SetHideCountdownNumbers(true)
     if frame.chargeCooldown.SetDrawBling then frame.chargeCooldown:SetDrawBling(false) end
-    if frame.chargeCooldown.SetDrawEdge then frame.chargeCooldown:SetDrawEdge(false) end
-    if frame.chargeCooldown.SetSwipeColor then frame.chargeCooldown:SetSwipeColor(0, 0, 0, 0.4) end
-    frame.chargeCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() - 1)
+    if frame.chargeCooldown.SetDrawSwipe then frame.chargeCooldown:SetDrawSwipe(false) end
+    if frame.chargeCooldown.SetDrawEdge then frame.chargeCooldown:SetDrawEdge(true) end
+    frame.chargeCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() + 1)
     frame.chargeCooldown:Hide()
 
     frame.chargeCount = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
@@ -384,7 +386,23 @@ end
 
 function Display:UpdateCooldown(icon, spellID)
     if not icon or not icon.cooldown then return end
-    if not TrueShot.GetOpt("showCooldownSwipe") or not spellID or not C_Spell_GetSpellCooldown then
+    if not TrueShot.GetOpt("showCooldownSwipe") or not spellID then
+        ClearCooldown(icon)
+        return
+    end
+
+    -- Prefer DurationObject path (secret-safe, available since build 66562)
+    if C_Spell_GetSpellCooldownDuration and icon.cooldown.SetCooldownFromDurationObject then
+        local ok, durObj = pcall(C_Spell_GetSpellCooldownDuration, spellID)
+        if ok and durObj then
+            icon.cooldown:SetCooldownFromDurationObject(durObj)
+            icon.cooldown:Show()
+            return
+        end
+    end
+
+    -- Fallback: direct SetCooldown (pre-66562 or if DurationObject unavailable)
+    if not C_Spell_GetSpellCooldown then
         ClearCooldown(icon)
         return
     end
@@ -416,39 +434,66 @@ end
 
 function Display:UpdateChargeCooldown(icon, spellID)
     if not icon or not icon.chargeCooldown then return end
-    if not TrueShot.GetOpt("showCooldownSwipe") or not spellID or not C_Spell_GetSpellCharges then
+    if not TrueShot.GetOpt("showCooldownSwipe") or not spellID then
         icon.chargeCooldown:Hide()
         if icon.chargeCount then icon.chargeCount:Hide() end
         return
     end
 
-    local ok, charges = pcall(C_Spell_GetSpellCharges, spellID)
-    if not ok or not charges or not charges.maxCharges or charges.maxCharges <= 1 then
+    -- Read charge info for count display
+    local current, maxC
+    if C_Spell_GetSpellCharges then
+        local ok, charges = pcall(C_Spell_GetSpellCharges, spellID)
+        if ok and charges and charges.maxCharges and charges.maxCharges > 1 then
+            current = charges.currentCharges or 0
+            maxC = charges.maxCharges or 1
+            if issecretvalue and (issecretvalue(current) or issecretvalue(maxC)) then
+                -- Secret: try passthrough for display, skip edge ring
+                icon.chargeCount:SetText(current)
+                icon.chargeCount:Show()
+                icon.chargeCooldown:Hide()
+                return
+            end
+        else
+            icon.chargeCooldown:Hide()
+            if icon.chargeCount then icon.chargeCount:Hide() end
+            return
+        end
+    else
         icon.chargeCooldown:Hide()
         if icon.chargeCount then icon.chargeCount:Hide() end
         return
     end
 
-    local current = charges.currentCharges or 0
-    local maxC = charges.maxCharges or 1
-
-    if issecretvalue and (issecretvalue(current) or issecretvalue(maxC)) then
-        icon.chargeCooldown:Hide()
-        if icon.chargeCount then icon.chargeCount:Hide() end
-        return
-    end
-
-    if current < maxC and charges.cooldownStartTime and charges.cooldownDuration then
+    -- Show charge count only when regenerating
+    if current < maxC then
         icon.chargeCount:SetText(current)
         icon.chargeCount:Show()
-        local modRate = charges.chargeModRate or 1.0
-        if issecretvalue and issecretvalue(modRate) then modRate = 1.0 end
-        icon.chargeCooldown:SetCooldown(
-            charges.cooldownStartTime,
-            charges.cooldownDuration,
-            modRate
-        )
-        icon.chargeCooldown:Show()
+
+        -- Prefer DurationObject for the edge ring (secret-safe)
+        if C_Spell_GetSpellChargeDuration and icon.chargeCooldown.SetCooldownFromDurationObject then
+            local ok, durObj = pcall(C_Spell_GetSpellChargeDuration, spellID)
+            if ok and durObj then
+                icon.chargeCooldown:SetCooldownFromDurationObject(durObj)
+                icon.chargeCooldown:Show()
+                return
+            end
+        end
+
+        -- Fallback: direct SetCooldown from charge info
+        local ok, charges = pcall(C_Spell_GetSpellCharges, spellID)
+        if ok and charges and charges.cooldownStartTime and charges.cooldownDuration then
+            local modRate = charges.chargeModRate or 1.0
+            if issecretvalue and issecretvalue(modRate) then modRate = 1.0 end
+            icon.chargeCooldown:SetCooldown(
+                charges.cooldownStartTime,
+                charges.cooldownDuration,
+                modRate
+            )
+            icon.chargeCooldown:Show()
+        else
+            icon.chargeCooldown:Hide()
+        end
     else
         icon.chargeCooldown:Hide()
         icon.chargeCount:Hide()
