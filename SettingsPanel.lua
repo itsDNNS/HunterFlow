@@ -93,9 +93,13 @@ local function CreateSettingsPanel()
     scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 0)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetWidth(scrollFrame:GetWidth())
-    scrollChild:SetHeight(1) -- will be updated after all controls are placed
+    scrollChild:SetSize(600, 1)
     scrollFrame:SetScrollChild(scrollChild)
+
+    -- Track scroll child width to match scroll frame after layout
+    scrollFrame:SetScript("OnSizeChanged", function(self, w)
+        scrollChild:SetWidth(w)
+    end)
 
     -- All controls parent to scrollChild instead of panel
     local content = scrollChild
@@ -252,21 +256,17 @@ local function CreateSettingsPanel()
     hint:SetJustifyH("LEFT")
     hint:SetText("For diagnostics and debugging, use /ts debug and /ts probe commands.")
 
-    -- Set scroll child height to fit all controls (measured from top to hint bottom + padding)
-    scrollChild:SetScript("OnShow", function(self)
-        C_Timer.After(0, function()
-            local bottom = hint:GetBottom()
-            local top = content:GetTop()
-            if bottom and top then
-                self:SetHeight(top - bottom + 30)
-            else
-                self:SetHeight(1200)
-            end
-        end)
-    end)
-    scrollChild:SetHeight(1200) -- safe initial height
+    -- Dynamically size scroll child height from content
+    local function UpdateScrollChildHeight()
+        local top = scrollChild:GetTop()
+        local bottom = hint:GetBottom()
+        if top and bottom then
+            scrollChild:SetHeight(top - bottom + 30)
+        end
+    end
 
     panel:SetScript("OnShow", function()
+        C_Timer.After(0, UpdateScrollChildHeight)
         lockCheck.sync()
         enemyCheck.sync()
         combatCheck.sync()
