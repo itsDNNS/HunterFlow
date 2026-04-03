@@ -23,22 +23,21 @@ Hero Paths: Aldrachi Reaver, Fel-Scarred
 | Reaver's Mark uptime | hidden debuff | impossible | no | no |
 | The Hunt usage | C_AssistedCombat | direct | yes | yes (base AC) |
 | AoE target switching | nameplate count | direct (partial) | best-effort | yes |
-| Throw Glaive suppression (Screaming Brutality) | talent check | direct | IsPlayerSpell | yes |
+| Throw Glaive suppression (Screaming Brutality) | talent check | direct | IsPlayerSpell | removed |
 
 ### Havoc Profile Rules (Implementable)
 
-**Aldrachi Reaver (markerSpell: Reaver's Glaive - need spell ID):**
+**Aldrachi Reaver (markerSpell: 442294 - Reaver's Glaive):**
 - BLACKLIST: utility spells (Imprison, etc.)
 - PIN: Eye Beam when Metamorphosis is active (heuristic: Meta cast event + 30s timer)
 - PREFER: Essence Break during Metamorphosis window
 - PREFER: Blade Dance (high priority filler)
 - BLACKLIST_CONDITIONAL: Immolation Aura when at 0 charges (use charge API)
 
-**Fel-Scarred (markerSpell: need spec-exclusive spell ID):**
+**Fel-Scarred (markerSpell: 452402 - Demonsurge):**
 - Similar to Aldrachi but with Demonsurge interactions (mostly handled by AC)
 - PIN: Eye Beam when Meta window active
 - PREFER: Essence Break during Meta
-- BLACKLIST_CONDITIONAL: Throw Glaive (Screaming Brutality handles it)
 
 ### Havoc Limitations
 - Fury is secret - cannot optimize spend/build decisions
@@ -46,9 +45,9 @@ Hero Paths: Aldrachi Reaver, Fel-Scarred
 - Exact Metamorphosis duration/CD unknown - use cast-event timer only
 - Inertia buff state is hidden - can only track the Vengeful Retreat cast
 
-## Devourer (specID: TBD - new Midnight spec)
+## Devourer (specID: 1480)
 
-Hero Paths: Annihilator, Void-Scarred
+Hero Paths: Annihilator (markerSpell: 1253304 - Voidfall), Void-Scarred (markerless fallback - Demonsurge shared with Havoc)
 
 ### Devourer Key Mechanics
 
@@ -82,14 +81,13 @@ Hero Paths: Annihilator, Void-Scarred
 - Moment of Craving is a hidden proc
 - This spec will be much more AC-reliant than Havoc
 
-## Spell IDs Needed
+## Spell IDs (Resolved)
 
-Must be validated in-game on the .46 machine:
 - Havoc specID: 577
-- Devourer specID: (new, needs lookup)
-- Aldrachi Reaver marker spell (Reaver's Glaive): needs ID
-- Fel-Scarred marker spell: needs ID
-- Annihilator marker spell: needs ID
-- Void-Scarred marker spell: needs ID
+- Devourer specID: 1480
+- Aldrachi Reaver marker spell: 442294 (Reaver's Glaive)
+- Fel-Scarred marker spell: 452402 (Demonsurge)
+- Annihilator marker spell: 1253304 (Voidfall)
+- Void-Scarred: markerless fallback (Demonsurge 452402 shared with Havoc Fel-Scarred)
 - Key Havoc spells: Eye Beam, Metamorphosis, Blade Dance, Death Sweep, Essence Break, Immolation Aura, Vengeful Retreat, The Hunt, Chaos Strike, Annihilation, Felblade, Fel Rush
 - Key Devourer spells: Void Metamorphosis, Reap, Void Ray, Collapsing Star, Cull, Consume, Devour, Voidblade, Pierce the Veil
