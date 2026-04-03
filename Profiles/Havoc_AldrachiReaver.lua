@@ -26,9 +26,9 @@ local Profile = {
         -- Filter utility spells
         { type = "BLACKLIST", spellID = 217832 }, -- Imprison
 
-        -- Essence Break: highest priority during Metamorphosis
+        -- Essence Break: prefer during Metamorphosis for maximum burst value
         {
-            type = "PIN",
+            type = "PREFER",
             spellID = 258860, -- Essence Break
             reason = "Meta Burst",
             condition = { type = "in_meta_window" },

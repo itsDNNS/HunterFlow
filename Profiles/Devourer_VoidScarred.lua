@@ -15,7 +15,9 @@ local Profile = {
     id = "DemonHunter.Devourer.VoidScarred",
     displayName = "Devourer Void-Scarred",
     specID = 1480,
-    markerSpell = 452402, -- Demonsurge (Void-Scarred exclusive)
+    -- No markerSpell: serves as Devourer fallback when Annihilator's
+    -- Voidfall marker does not match. Demonsurge (452402) is shared
+    -- with Havoc Fel-Scarred so it cannot be used as an exclusive marker.
 
     state = {
         lastVoidMetaCast = 0,
