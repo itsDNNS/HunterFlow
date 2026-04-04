@@ -8,6 +8,9 @@ local Profile = {
     displayName = "Frost Spellslinger",
     specID = 64,
     markerSpell = 443722, -- Frost Splinter (Spellslinger exclusive)
+    -- Inverted from Fire/Arcane pattern: Frostfire is the unmarked fallback
+    -- because it covers 100% of top parses. This marker ensures Spellslinger
+    -- only activates for the rare players who actually talent into it.
 
     state = {},
 
