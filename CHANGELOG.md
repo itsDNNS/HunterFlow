@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.11.0 - 2026-04-04
+
+### Added
+- **Mage Support**: Fire, Frost, and Arcane with hero path detection
+  - Fire Sunfury: Combustion burst window tracking, Flamestrike AoE gating
+  - Fire Frostfire: Fallback profile
+  - Frost Frostfire: Frozen Orb tracking, Blizzard AoE gating
+  - Frost Spellslinger: Fallback profile
+  - Arcane Sunfury: Arcane Surge + Touch of the Magi burst tracking
+  - Arcane Spellslinger: Fallback profile
+
+## v0.10.0 - 2026-04-04
+
+### Changed
+- Removed unsupported Essence Break rule from Havoc DH profiles (WCL-validated)
+
+## v0.9.0 - 2026-04-03
+
+### Changed
+- Removed BW charge-dump gating from BM profiles (WCL-validated: top players press BW immediately)
+- Removed Charge Dump phase detection and related logic
+
+## v0.8.0 - 2026-04-02
+
+### Added
+- **Demon Hunter Support**: Havoc and Devourer with hero path detection
+- **Druid Support**: Feral and Balance with hero path detection
+- Metamorphosis, Tiger's Fury/Berserk, Celestial Alignment burst tracking
+
 ## v0.7.1 - 2026-04-02
 
 ### Improved
