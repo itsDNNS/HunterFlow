@@ -530,7 +530,7 @@ local aoeHintPending = nil     -- candidate spell awaiting stabilization
 local aoeHintPendingTicks = 0
 
 local function CreateAoeHintIcon()
-    local size = math.floor((TrueShot.GetOpt("iconSize") or 40) * 0.7)
+    local size = TrueShot.GetOpt("iconSize") or 40
     local frame = CreateFrame("Frame", "TrueShotAoeHint", content)
     frame:SetSize(size, size)
 
@@ -551,16 +551,53 @@ local function CreateAoeHintIcon()
     frame.keybind:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
     frame.keybind:SetJustifyH("RIGHT")
 
-    frame:SetAlpha(0.85)
+    -- Pulsing AoE glow
+    frame.glow = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    frame.glow:SetAllPoints()
+    frame.glow:SetAtlas("UI-HUD-ActionBar-IconFrame-Mouseover")
+    frame.glow:SetVertexColor(1.0, 0.5, 0.1, 1.0) -- orange
+    frame.glow:SetBlendMode("ADD")
+    frame.glow:SetAlpha(0)
+    frame.glow:Hide()
+
+    frame.glowAnim = frame.glow:CreateAnimationGroup()
+    frame.glowAnim:SetLooping("BOUNCE")
+    local glowFade = frame.glowAnim:CreateAnimation("Alpha")
+    glowFade:SetFromAlpha(0.25)
+    glowFade:SetToAlpha(0.75)
+    glowFade:SetDuration(0.5)
+    glowFade:SetOrder(1)
+    glowFade:SetSmoothing("IN_OUT")
+
+    -- Scale bounce on appear
+    frame.bounceAnim = frame:CreateAnimationGroup()
+    local scaleUp = frame.bounceAnim:CreateAnimation("Scale")
+    scaleUp:SetScale(1.35, 1.35)
+    scaleUp:SetDuration(0.12)
+    scaleUp:SetOrder(1)
+    scaleUp:SetSmoothing("OUT")
+    local scaleDown = frame.bounceAnim:CreateAnimation("Scale")
+    scaleDown:SetScale(1 / 1.35, 1 / 1.35)
+    scaleDown:SetDuration(0.15)
+    scaleDown:SetOrder(2)
+    scaleDown:SetSmoothing("IN")
+
+    frame:SetAlpha(1)
     frame:Hide()
     return frame
 end
 
 local function RenderAoeHint(spellID)
+    local wasHidden = not aoeHintIcon or not aoeHintIcon:IsShown()
+    local prevSpell = aoeHintDisplayed
     aoeHintDisplayed = spellID
 
     if not spellID then
-        if aoeHintIcon then aoeHintIcon:Hide() end
+        if aoeHintIcon then
+            if aoeHintIcon.glowAnim then aoeHintIcon.glowAnim:Stop() end
+            if aoeHintIcon.glow then aoeHintIcon.glow:Hide() end
+            aoeHintIcon:Hide()
+        end
         return
     end
 
@@ -570,23 +607,33 @@ local function RenderAoeHint(spellID)
 
     local texture = C_Spell_GetSpellTexture and C_Spell_GetSpellTexture(spellID)
     if not texture then
+        aoeHintIcon.glowAnim:Stop()
+        aoeHintIcon.glow:Hide()
         aoeHintIcon:Hide()
         return
     end
 
     -- Only show when icon 1 is visible
     if not icons[1] or not icons[1]:IsShown() then
+        aoeHintIcon.glowAnim:Stop()
+        aoeHintIcon.glow:Hide()
         aoeHintIcon:Hide()
         return
     end
 
     local iconSize = TrueShot.GetOpt("iconSize") or 40
-    local firstScale = TrueShot.GetOpt("firstIconScale") or 1.3
-    local hintSize = math.floor(iconSize * 0.7)
-    aoeHintIcon:SetSize(hintSize, hintSize)
+    local spacing = TrueShot.GetOpt("iconSpacing") or 4
+    local orient = TrueShot.GetOpt("orientation") or "LEFT"
+    aoeHintIcon:SetSize(iconSize, iconSize)
+    aoeHintIcon:SetAlpha(1)
     aoeHintIcon:ClearAllPoints()
-    aoeHintIcon:SetPoint("TOP", icons[1], "BOTTOM", 0, -4)
-    aoeHintIcon:SetScale(firstScale)
+    if orient == "DOWN" then
+        aoeHintIcon:SetPoint("RIGHT", icons[1], "LEFT", -spacing, 0)
+    elseif orient == "UP" then
+        aoeHintIcon:SetPoint("LEFT", icons[1], "RIGHT", spacing, 0)
+    else
+        aoeHintIcon:SetPoint("TOP", icons[1], "BOTTOM", 0, -spacing)
+    end
 
     aoeHintIcon.texture:SetTexture(texture)
 
@@ -598,6 +645,16 @@ local function RenderAoeHint(spellID)
     end
 
     aoeHintIcon:Show()
+
+    -- Animate on first appear or spell change
+    if wasHidden or prevSpell ~= spellID then
+        aoeHintIcon.glow:Show()
+        if not aoeHintIcon.glowAnim:IsPlaying() then
+            aoeHintIcon.glowAnim:Play()
+        end
+        aoeHintIcon.bounceAnim:Stop()
+        aoeHintIcon.bounceAnim:Play()
+    end
 end
 
 local function UpdateAoeHintIcon(spellID)
@@ -920,9 +977,14 @@ function Display:UpdateQueue(queue)
 
         if spellID then
             local texture = C_Spell_GetSpellTexture and C_Spell_GetSpellTexture(spellID)
+
+            -- If texture is nil (Midnight secret/intermittent), keep existing
+            -- texture visible instead of hiding the icon
             if texture then
                 icon.texture:SetTexture(texture)
+            end
 
+            if texture or (icon:IsShown() and icon.spellID == spellID) then
                 -- Keybinds toggle
                 if TrueShot.GetOpt("showKeybinds") then
                     local key = GetKeybindForSpell(spellID)
@@ -1111,35 +1173,39 @@ local UnitAffectingCombat = UnitAffectingCombat
 local UnitExists = UnitExists
 local UnitCanAttack = UnitCanAttack
 
+local function OnUpdateHandler(_, elapsed)
+    timeSinceUpdate = timeSinceUpdate + elapsed
+
+    if not container:IsShown() then return end
+
+    local inCombat = UnitAffectingCombat("player")
+    local hasHostile = UnitExists("target") and UnitCanAttack("player", "target")
+    local interval = (inCombat or hasHostile) and COMBAT_INTERVAL or IDLE_INTERVAL
+
+    if timeSinceUpdate < interval then return end
+    timeSinceUpdate = 0
+
+    local queue = Engine:ComputeQueue(TrueShot.GetOpt("iconCount"))
+    Display:ConsumeQueueUpdate(queue, inCombat)
+end
+
+local displayEnabled = false
+
 function Display:Enable()
+    if displayEnabled then return end
+    displayEnabled = true
     EnsureIcons()
     self:ApplyOptions()
     container:EnableMouse(not TrueShot.GetOpt("locked"))
     container:Show()
     self:FlushQueueStabilization()
-    timeSinceUpdate = IDLE_INTERVAL  -- force immediate first update in any tier
-    container:SetScript("OnUpdate", function(_, elapsed)
-        timeSinceUpdate = timeSinceUpdate + elapsed
-
-        -- Hidden early exit: skip all work if container not visible
-        if not container:IsShown() then return end
-
-        -- Tiered rate:
-        --   Combat or hostile target: 10Hz (time-based conditions active)
-        --   Idle (no combat, no hostile target): 2Hz
-        local inCombat = UnitAffectingCombat("player")
-        local hasHostile = UnitExists("target") and UnitCanAttack("player", "target")
-        local interval = (inCombat or hasHostile) and COMBAT_INTERVAL or IDLE_INTERVAL
-
-        if timeSinceUpdate < interval then return end
-        timeSinceUpdate = 0
-
-        local queue = Engine:ComputeQueue(TrueShot.GetOpt("iconCount"))
-        Display:ConsumeQueueUpdate(queue, inCombat)
-    end)
+    timeSinceUpdate = IDLE_INTERVAL
+    container:SetScript("OnUpdate", OnUpdateHandler)
 end
 
 function Display:Disable()
+    if not displayEnabled then return end
+    displayEnabled = false
     self:ResetQueueStabilization()
     ResetStoredQueue(displayedQueueState)
     container:SetScript("OnUpdate", nil)
