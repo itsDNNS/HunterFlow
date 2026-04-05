@@ -95,47 +95,247 @@ local function ClearCooldown(icon)
 end
 
 local keybindCache = {}
+local keybindNameCache = {}
+local keybindTextureCache = {}
 local keybindCacheDirty = true
 
-local function GetKeyForSlot(slot)
-    local btn = (slot - 1) % 12 + 1
-    local bar = math.ceil(slot / 12)
-    local key = GetBindingKey("ACTIONBUTTON" .. btn)
-    if not key and bar >= 2 and bar <= 6 then
-        key = GetBindingKey("MULTIACTIONBAR" .. (bar - 1) .. "BUTTON" .. btn)
+local ACTION_BUTTON_BINDINGS = {
+    { prefix = "ActionButton", commandPrefix = "ACTIONBUTTON" },
+    { prefix = "MultiBarBottomLeftButton", commandPrefix = "MULTIACTIONBAR1BUTTON" },
+    { prefix = "MultiBarBottomRightButton", commandPrefix = "MULTIACTIONBAR2BUTTON" },
+    { prefix = "MultiBarRightButton", commandPrefix = "MULTIACTIONBAR3BUTTON" },
+    { prefix = "MultiBarLeftButton", commandPrefix = "MULTIACTIONBAR4BUTTON" },
+    { prefix = "MultiBar5Button", commandPrefix = "MULTIACTIONBAR5BUTTON" },
+    { prefix = "MultiBar6Button", commandPrefix = "MULTIACTIONBAR6BUTTON" },
+    { prefix = "MultiBar7Button", commandPrefix = "MULTIACTIONBAR7BUTTON" },
+}
+
+local LegacyGetSpellInfo = rawget(_G, "GetSpellInfo")
+local LegacyGetActionTexture = rawget(_G, "GetActionTexture")
+
+local function NormalizeSpellName(name)
+    if type(name) ~= "string" then return nil end
+    name = name:gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then return nil end
+    return name:lower()
+end
+
+local function ResolveSpellNameFromID(spellID)
+    if not spellID then return nil end
+    if C_Spell and C_Spell.GetSpellName then
+        local ok, name = pcall(C_Spell.GetSpellName, spellID)
+        if ok and name then
+            return NormalizeSpellName(name)
+        end
     end
-    return key
+    if LegacyGetSpellInfo then
+        local name = LegacyGetSpellInfo(spellID)
+        if name then
+            return NormalizeSpellName(name)
+        end
+    end
+    return nil
+end
+
+local function ResolveSpellIDFromIdentifier(spellIdentifier)
+    if type(spellIdentifier) == "number" then
+        return spellIdentifier
+    end
+    if type(spellIdentifier) ~= "string" then
+        return nil
+    end
+
+    if C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, spellIdentifier)
+        if ok and info and info.spellID then
+            return info.spellID
+        end
+    end
+
+    if LegacyGetSpellInfo then
+        local _, _, _, _, _, _, legacySpellID = LegacyGetSpellInfo(spellIdentifier)
+        if legacySpellID then
+            return legacySpellID
+        end
+    end
+
+    return nil
+end
+
+local function ResolveSpellFromMacro(macroID)
+    if not macroID then
+        return nil, nil
+    end
+
+    if GetMacroSpell then
+        local macroSpell = GetMacroSpell(macroID)
+        local spellID = ResolveSpellIDFromIdentifier(macroSpell)
+        if spellID then
+            return spellID, ResolveSpellNameFromID(spellID)
+        end
+        if type(macroSpell) == "string" then
+            return nil, NormalizeSpellName(macroSpell)
+        end
+    end
+
+    if not GetMacroBody then
+        return nil, nil
+    end
+
+    local body = GetMacroBody(macroID)
+    if type(body) ~= "string" or body == "" then
+        return nil, nil
+    end
+
+    for line in body:gmatch("[^\r\n]+") do
+        local command, args = line:match("^%s*/(%S+)%s+(.+)$")
+        if command and args then
+            command = command:lower()
+            if command == "cast" or command == "castsequence" then
+                args = args:gsub("%b[]", "")
+                local token = args:match("^%s*([^,;]+)")
+                if token then
+                    token = token:gsub("^%s+", ""):gsub("%s+$", ""):gsub("^!", "")
+                    local spellID = ResolveSpellIDFromIdentifier(tonumber(token) or token)
+                    if spellID then
+                        return spellID, ResolveSpellNameFromID(spellID)
+                    end
+                    local nameKey = NormalizeSpellName(token)
+                    if nameKey then
+                        return nil, nameKey
+                    end
+                end
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+local function ResolveActionSlotFromButton(button)
+    if not button then return nil end
+    if button.CalculateAction then
+        local slot = button:CalculateAction()
+        if slot then return slot end
+    end
+    return button.action
+end
+
+local function GetPreferredBindingKey(command)
+    local a, b = GetBindingKey(command)
+    if b and type(b) == "string" and b:find("%-") and (not a or (type(a) == "string" and not a:find("%-"))) then
+        return b
+    end
+    return a or b
+end
+
+local function GetPreferredBindingFromBindingEntry(key1, key2)
+    if key2 and type(key2) == "string" and key2:find("%-") and (not key1 or (type(key1) == "string" and not key1:find("%-"))) then
+        return key2
+    end
+    return key1 or key2
+end
+
+local function CacheSpellKeybind(spellID, spellNameKey, key)
+    if not key then return end
+    if spellID and not keybindCache[spellID] then
+        keybindCache[spellID] = key
+    end
+    if spellNameKey and not keybindNameCache[spellNameKey] then
+        keybindNameCache[spellNameKey] = key
+    end
 end
 
 local function RebuildKeybindCache()
     wipe(keybindCache)
-    for slot = 1, 120 do
-        local actionType, id = GetActionInfo(slot)
-        local spellID = nil
+    wipe(keybindNameCache)
+    wipe(keybindTextureCache)
 
-        if (actionType == "spell" or actionType == "macro") and id then
-            spellID = id
-        end
-
-        if spellID then
-            local key = GetKeyForSlot(slot)
-            if key and not keybindCache[spellID] then
-                keybindCache[spellID] = key
+    for _, bar in ipairs(ACTION_BUTTON_BINDINGS) do
+        for btn = 1, 12 do
+            local key = GetPreferredBindingKey(bar.commandPrefix .. btn)
+            if key then
+                local button = _G[bar.prefix .. btn]
+                local slot = ResolveActionSlotFromButton(button)
+                if slot then
+                    local actionType, id = GetActionInfo(slot)
+                    if actionType == "spell" and id then
+                        CacheSpellKeybind(id, ResolveSpellNameFromID(id), key)
+                    elseif actionType == "macro" and id then
+                        local spellID, spellNameKey = ResolveSpellFromMacro(id)
+                        CacheSpellKeybind(spellID, spellNameKey, key)
+                        if not spellID and not spellNameKey then
+                            local texture = LegacyGetActionTexture and LegacyGetActionTexture(slot)
+                            if texture and not keybindTextureCache[texture] then
+                                keybindTextureCache[texture] = key
+                            end
+                        end
+                    end
+                end
             end
         end
     end
+
+    -- Also support direct keybindings to macros (not on action bars).
+    if GetNumBindings and GetBinding and GetMacroIndexByName then
+        for i = 1, GetNumBindings() do
+            local command, key1, key2 = GetBinding(i)
+            if type(command) == "string" and command:find("^MACRO ") then
+                local macroName = command:sub(7)
+                local macroID = GetMacroIndexByName(macroName)
+                if macroID and macroID > 0 then
+                    local spellID, spellNameKey = ResolveSpellFromMacro(macroID)
+                    local key = GetPreferredBindingFromBindingEntry(key1, key2)
+                    CacheSpellKeybind(spellID, spellNameKey, key)
+                end
+            end
+        end
+    end
+
     keybindCacheDirty = false
 end
 
 local keybindFrame = CreateFrame("Frame")
 keybindFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+keybindFrame:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
 keybindFrame:RegisterEvent("UPDATE_BINDINGS")
 keybindFrame:RegisterEvent("SPELLS_CHANGED")
+keybindFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+keybindFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 keybindFrame:SetScript("OnEvent", function() keybindCacheDirty = true end)
 
 local function GetKeybindForSpell(spellID)
     if keybindCacheDirty then RebuildKeybindCache() end
-    return keybindCache[spellID]
+    local key = keybindCache[spellID]
+    if key then return key end
+    local nameKey = ResolveSpellNameFromID(spellID)
+    if nameKey then
+        key = keybindNameCache[nameKey]
+        if key then return key end
+    end
+
+    if C_Spell_GetSpellTexture then
+        local texture = C_Spell_GetSpellTexture(spellID)
+        if texture then
+            key = keybindTextureCache[texture]
+            if key then
+                keybindCache[spellID] = key
+                if nameKey then
+                    keybindNameCache[nameKey] = key
+                end
+                return key
+            end
+        end
+    end
+    return nil
+end
+
+local function FormatKeybindForDisplay(key)
+    if type(key) ~= "string" then
+        return ""
+    end
+    key = key:gsub("SHIFT%-", "S-")
+    return key
 end
 
 local function CreateIcon(index)
@@ -566,7 +766,7 @@ function Display:UpdateQueue(queue)
                 -- Keybinds toggle
                 if TrueShot.GetOpt("showKeybinds") then
                     local key = GetKeybindForSpell(spellID)
-                    icon.keybind:SetText(key or "")
+                    icon.keybind:SetText(FormatKeybindForDisplay(key))
                 else
                     icon.keybind:SetText("")
                 end
