@@ -34,7 +34,7 @@ local function GetHostileCount()
     end
     local count = 0
     for _, plate in ipairs(plates) do
-        local unit = plate.namePlateUnitToken
+        local unit = plate.namePlateUnitToken or plate.unitToken
         if unit and UnitExists(unit) and UnitCanAttack("player", unit) then
             count = count + 1
         end
