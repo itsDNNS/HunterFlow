@@ -732,16 +732,6 @@ function Display:UpdateContainerSize()
     LayoutIcons()
 end
 
-function Display:GetPositionCoordinatesText()
-    local point, relativeName, relativePoint, xOfs, yOfs = self:GetPositionOffsets()
-    if not point then
-        return nil
-    end
-
-    return string.format("%s->%s:%s X %.2f Y %.2f", point, relativeName,
-        relativePoint or point, xOfs or 0, yOfs or 0)
-end
-
 function Display:GetPositionOffsets()
     local point, relativeTo, relativePoint, xOfs, yOfs = container:GetPoint(1)
     if not point then
