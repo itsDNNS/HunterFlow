@@ -46,6 +46,7 @@ container:SetScript("OnDragStart", function(self)
 end)
 container:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
+    Display:SaveCurrentPosition()
 end)
 container:SetBackdrop({
     bgFile = "Interface/Tooltips/UI-Tooltip-Background",
@@ -771,11 +772,38 @@ function Display:SetPositionOffsets(xOfs, yOfs)
 
     container:ClearAllPoints()
     container:SetPoint(point, UIParent, relativePoint, xOfs, yOfs)
+
+    TrueShot.SetOpt("posPoint", point)
+    TrueShot.SetOpt("posRelPoint", relativePoint)
+    TrueShot.SetOpt("posX", xOfs)
+    TrueShot.SetOpt("posY", yOfs)
     return true
+end
+
+function Display:SaveCurrentPosition()
+    local point, _, relativePoint, xOfs, yOfs = container:GetPoint(1)
+    if point then
+        TrueShot.SetOpt("posPoint", point)
+        TrueShot.SetOpt("posRelPoint", relativePoint or point)
+        TrueShot.SetOpt("posX", xOfs or 0)
+        TrueShot.SetOpt("posY", yOfs or 0)
+    end
+end
+
+function Display:RestorePosition()
+    local point = TrueShot.GetOpt("posPoint")
+    local relPoint = TrueShot.GetOpt("posRelPoint")
+    local x = TrueShot.GetOpt("posX")
+    local y = TrueShot.GetOpt("posY")
+    if point and x and y then
+        container:ClearAllPoints()
+        container:SetPoint(point, UIParent, relPoint or point, x, y)
+    end
 end
 
 function Display:ApplyOptions()
     self:UpdateContainerSize()
+    self:RestorePosition()
     container:EnableMouse(not TrueShot.GetOpt("locked"))
     container:SetScale(TrueShot.GetOpt("overlayScale") or 1.0)
     container:SetAlpha(TrueShot.GetOpt("overlayOpacity") or 1.0)
@@ -1201,6 +1229,10 @@ end
 function Display:ResetPosition()
     container:ClearAllPoints()
     container:SetPoint("CENTER", UIParent, "CENTER", 0, -50)
+    TrueShot.SetOpt("posPoint", nil)
+    TrueShot.SetOpt("posRelPoint", nil)
+    TrueShot.SetOpt("posX", nil)
+    TrueShot.SetOpt("posY", nil)
 end
 
 TrueShot.RegisterOptCallback(function(key)
