@@ -27,6 +27,20 @@ local Profile = {
         lastWildThrashCast = 0,
     },
 
+    -- AoE hint: show Wild Thrash in secondary icon when 2+ hostile nameplates visible
+    aoeHint = {
+        spellID = 1264359, -- Wild Thrash
+        condition = {
+            type = "and",
+            left  = { type = "in_combat" },
+            right = {
+                type = "and",
+                left  = { type = "target_count", op = ">=", value = 2 },
+                right = { type = "not", inner = { type = "wt_on_cd" } },
+            },
+        },
+    },
+
     rules = {
         -- Filter utility spells
         { type = "BLACKLIST", spellID = 883 },    -- Call Pet 1
@@ -74,22 +88,6 @@ local Profile = {
                 type = "and",
                 left  = { type = "ba_ready" },
                 right = { type = "not", inner = { type = "in_withering_fire" } },
-            },
-        },
-
-        -- Wild Thrash: AoE priority at 2+ targets, only in combat (WCL: 79% on-CD in M+)
-        {
-            type = "PIN",
-            spellID = 1264359, -- Wild Thrash
-            reason = "AoE 2+",
-            condition = {
-                type = "and",
-                left  = { type = "in_combat" },
-                right = {
-                    type = "and",
-                    left  = { type = "target_count", op = ">=", value = 2 },
-                    right = { type = "not", inner = { type = "wt_on_cd" } },
-                },
             },
         },
 

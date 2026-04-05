@@ -31,6 +31,7 @@ local DEFAULTS = {
     firstIconScale = 1.3,
     orientation = "LEFT",
     showBackdrop = true,
+    showAoeHint = true,
 }
 
 local optionCallbacks = {}

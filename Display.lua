@@ -20,6 +20,7 @@ local CONTAINER_PADDING_X = 8
 local CONTAINER_PADDING_Y = 6
 local ICON_TEXTURE_INSET = 3
 local QUEUE_STABILIZATION_TICKS = 2
+local QUEUE_HIDE_STABILIZATION_TICKS = 5  -- slower fade-out: require 5 stable ticks before hiding
 
 local displayedQueueState = { count = 0 }
 local pendingQueueState = { count = 0 }
@@ -519,6 +520,121 @@ local function ShowGlow(icon, source)
     end
 end
 
+------------------------------------------------------------------------
+-- AoE hint sub-icon (anchored below icon 1)
+------------------------------------------------------------------------
+
+local aoeHintIcon
+local aoeHintDisplayed = nil   -- currently shown spell
+local aoeHintPending = nil     -- candidate spell awaiting stabilization
+local aoeHintPendingTicks = 0
+
+local function CreateAoeHintIcon()
+    local size = math.floor((TrueShot.GetOpt("iconSize") or 40) * 0.7)
+    local frame = CreateFrame("Frame", "TrueShotAoeHint", content)
+    frame:SetSize(size, size)
+
+    frame.slotBackground = frame:CreateTexture(nil, "BACKGROUND")
+    frame.slotBackground:SetAllPoints()
+    frame.slotBackground:SetAtlas("UI-HUD-ActionBar-IconFrame-Background")
+
+    frame.texture = frame:CreateTexture(nil, "ARTWORK")
+    frame.texture:SetPoint("TOPLEFT", frame, "TOPLEFT", ICON_TEXTURE_INSET, -ICON_TEXTURE_INSET)
+    frame.texture:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -ICON_TEXTURE_INSET, ICON_TEXTURE_INSET)
+    frame.texture:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
+    frame.border = frame:CreateTexture(nil, "OVERLAY")
+    frame.border:SetAllPoints()
+    frame.border:SetAtlas("UI-HUD-ActionBar-IconFrame")
+
+    frame.keybind = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
+    frame.keybind:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+    frame.keybind:SetJustifyH("RIGHT")
+
+    frame:SetAlpha(0.85)
+    frame:Hide()
+    return frame
+end
+
+local function RenderAoeHint(spellID)
+    aoeHintDisplayed = spellID
+
+    if not spellID then
+        if aoeHintIcon then aoeHintIcon:Hide() end
+        return
+    end
+
+    if not aoeHintIcon then
+        aoeHintIcon = CreateAoeHintIcon()
+    end
+
+    local texture = C_Spell_GetSpellTexture and C_Spell_GetSpellTexture(spellID)
+    if not texture then
+        aoeHintIcon:Hide()
+        return
+    end
+
+    -- Only show when icon 1 is visible
+    if not icons[1] or not icons[1]:IsShown() then
+        aoeHintIcon:Hide()
+        return
+    end
+
+    local iconSize = TrueShot.GetOpt("iconSize") or 40
+    local firstScale = TrueShot.GetOpt("firstIconScale") or 1.3
+    local hintSize = math.floor(iconSize * 0.7)
+    aoeHintIcon:SetSize(hintSize, hintSize)
+    aoeHintIcon:ClearAllPoints()
+    aoeHintIcon:SetPoint("TOP", icons[1], "BOTTOM", 0, -4)
+    aoeHintIcon:SetScale(firstScale)
+
+    aoeHintIcon.texture:SetTexture(texture)
+
+    if TrueShot.GetOpt("showKeybinds") then
+        local key = GetKeybindForSpell(spellID)
+        aoeHintIcon.keybind:SetText(FormatKeybindForDisplay(key))
+    else
+        aoeHintIcon.keybind:SetText("")
+    end
+
+    aoeHintIcon:Show()
+end
+
+local function UpdateAoeHintIcon(spellID)
+    if not TrueShot.GetOpt("showAoeHint") then
+        RenderAoeHint(nil)
+        aoeHintPending = nil
+        aoeHintPendingTicks = 0
+        return
+    end
+
+    -- Same spell as currently displayed: nothing to stabilize
+    if spellID == aoeHintDisplayed then
+        aoeHintPending = nil
+        aoeHintPendingTicks = 0
+        return
+    end
+
+    -- New candidate: require QUEUE_STABILIZATION_TICKS consecutive ticks
+    if spellID == aoeHintPending then
+        aoeHintPendingTicks = aoeHintPendingTicks + 1
+    else
+        aoeHintPending = spellID
+        aoeHintPendingTicks = 1
+    end
+
+    if aoeHintPendingTicks >= QUEUE_STABILIZATION_TICKS then
+        RenderAoeHint(spellID)
+        aoeHintPending = nil
+        aoeHintPendingTicks = 0
+    end
+end
+
+local function ResetAoeHintStabilization()
+    aoeHintPending = nil
+    aoeHintPendingTicks = 0
+end
+
 local ORIENTATION_CONFIG = {
     LEFT  = { anchor = "LEFT",   axis = "x", sign =  1 },
     RIGHT = { anchor = "RIGHT",  axis = "x", sign = -1 },
@@ -885,6 +1001,9 @@ function Display:UpdateQueue(queue)
         phaseText:Hide()
     end
 
+    -- AoE hint sub-icon
+    UpdateAoeHintIcon(meta and meta.aoeHintSpell)
+
     -- Override glow: pulse position 1 when TrueShot overrides AC
     if icons[1] and icons[1].border then
         icons[1].border:SetVertexColor(1.0, 1.0, 1.0, 1.0)
@@ -944,7 +1063,11 @@ function Display:ConsumeQueueUpdate(queue, inCombat)
         pendingQueueTicks = 1
     end
 
-    if pendingQueueTicks >= QUEUE_STABILIZATION_TICKS then
+    -- Hiding (empty queue) requires more ticks than switching spells
+    local isHiding = (#queue == 0) and (displayedQueueState.count or 0) > 0
+    local threshold = isHiding and QUEUE_HIDE_STABILIZATION_TICKS or QUEUE_STABILIZATION_TICKS
+
+    if pendingQueueTicks >= threshold then
         self:RenderQueueNow(queue)
     else
         -- Pending but not stable yet: refresh visuals with currently displayed spells
@@ -989,8 +1112,8 @@ local UnitExists = UnitExists
 local UnitCanAttack = UnitCanAttack
 
 function Display:Enable()
-    self:ApplyOptions()
     EnsureIcons()
+    self:ApplyOptions()
     container:EnableMouse(not TrueShot.GetOpt("locked"))
     container:Show()
     self:FlushQueueStabilization()
@@ -1021,6 +1144,7 @@ function Display:Disable()
     ResetStoredQueue(displayedQueueState)
     container:SetScript("OnUpdate", nil)
     container:Hide()
+    if aoeHintIcon then aoeHintIcon:Hide() end
 end
 
 function Display:SetClickThrough(locked)

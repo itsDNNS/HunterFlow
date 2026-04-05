@@ -23,27 +23,25 @@ local Profile = {
         lastWildThrashCast = 0,
     },
 
+    -- AoE hint: show Wild Thrash in secondary icon when 2+ hostile nameplates visible
+    aoeHint = {
+        spellID = 1264359, -- Wild Thrash
+        condition = {
+            type = "and",
+            left  = { type = "in_combat" },
+            right = {
+                type = "and",
+                left  = { type = "target_count", op = ">=", value = 2 },
+                right = { type = "not", inner = { type = "wt_on_cd" } },
+            },
+        },
+    },
+
     rules = {
         -- Filter utility spells
         { type = "BLACKLIST", spellID = 883 },    -- Call Pet 1
         { type = "BLACKLIST", spellID = 982 },    -- Revive Pet
         { type = "BLACKLIST", spellID = 147362 }, -- Counter Shot (user preference)
-
-        -- Wild Thrash: highest AoE priority at 2+ targets, only in combat (WCL: 79% on-CD in M+)
-        {
-            type = "PIN",
-            spellID = 1264359, -- Wild Thrash
-            reason = "AoE 2+",
-            condition = {
-                type = "and",
-                left  = { type = "in_combat" },
-                right = {
-                    type = "and",
-                    left  = { type = "target_count", op = ">=", value = 2 },
-                    right = { type = "not", inner = { type = "wt_on_cd" } },
-                },
-            },
-        },
 
         -- Bestial Wrath: suppress only when on CD (WCL data: top players press BW
         -- immediately, even with BS charges available -- 26-55% of BW casts had charges)

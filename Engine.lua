@@ -184,6 +184,7 @@ function Engine:ComputeQueue(iconCount)
         self.lastQueueMeta.source = "ac"
         self.lastQueueMeta.reason = nil
         self.lastQueueMeta.phase = nil
+        self.lastQueueMeta.aoeHintSpell = nil
         return queue
     end
 
@@ -191,6 +192,7 @@ function Engine:ComputeQueue(iconCount)
         self.lastQueueMeta.source = "ac"
         self.lastQueueMeta.reason = nil
         self.lastQueueMeta.phase = nil
+        self.lastQueueMeta.aoeHintSpell = nil
         return queue
     end
 
@@ -258,9 +260,19 @@ function Engine:ComputeQueue(iconCount)
         if self:EvalCondition(_aoeCondition) then phase = "AoE" end
     end
 
+    -- AoE hint: profile declares a spell to show in secondary icon when AoE detected
+    local aoeHintSpell = nil
+    if profile.aoeHint and self:EvalCondition(profile.aoeHint.condition) then
+        local hintID = profile.aoeHint.spellID
+        if hintID and self:IsSpellCastable(hintID) and not IsBlocked(hintID) then
+            aoeHintSpell = hintID
+        end
+    end
+
     self.lastQueueMeta.source = source
     self.lastQueueMeta.reason = reason
     self.lastQueueMeta.phase = phase
+    self.lastQueueMeta.aoeHintSpell = aoeHintSpell
 
     -- Positions 2+ from GetRotationSpells()
     local rotSpells = C_AssistedCombat.GetRotationSpells()

@@ -182,11 +182,18 @@ local function CreateSettingsPanel()
         rangeDesc, "showWhyOverlay"
     )
 
+    local aoeHintCheck, aoeHintDesc = CreateCheckbox(
+        content,
+        "Show AoE hint icon",
+        "Display a secondary icon below the primary icon when an AoE ability is recommended (e.g. Wild Thrash at 2+ targets).",
+        whyDesc, "showAoeHint"
+    )
+
     local backdropCheck, backdropDesc = CreateCheckbox(
         content,
         "Show Backdrop",
         "Show the dark background behind the queue overlay.",
-        whyDesc, "showBackdrop"
+        aoeHintDesc, "showBackdrop"
     )
 
     -- Orientation
@@ -277,6 +284,7 @@ local function CreateSettingsPanel()
         keybindCheck.sync()
         rangeCheck.sync()
         whyCheck.sync()
+        aoeHintCheck.sync()
         backdropCheck.sync()
         UIDropDownMenu_SetText(orientDropdown, TrueShot.GetOpt("orientation"))
         local fis = TrueShot.GetOpt("firstIconScale") or 1.3

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.13.0 - 2026-04-05
+
+### Added
+- **AoE hint icon**: Secondary icon below the main icon shows AoE abilities (e.g. Wild Thrash) when 2+ hostile nameplates are detected. Shown as a suggestion rather than a hard PIN, since nameplate count can be unreliable.
+- **ElvUI keybind support**: Keybind labels now work with ElvUI action bars (bars 1-15)
+- **Settings**: "Show AoE hint icon" toggle
+
+### Changed
+- Wild Thrash moved from main queue PIN to AoE hint icon for BM profiles
+- Improved queue stabilization: hiding requires 5 stable ticks (500ms) to prevent flicker during passive combat phases
+- Fixed icon scaling on Enable: icons now get correct firstIconScale immediately after reload
+
 ## v0.11.0 - 2026-04-04
 
 ### Added
