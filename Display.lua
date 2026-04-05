@@ -150,6 +150,15 @@ local ACTION_BUTTON_BINDINGS = {
     { prefix = "MultiBar7Button", commandPrefix = "MULTIACTIONBAR7BUTTON" },
 }
 
+-- ElvUI support: click-binding format "CLICK ElvUI_BarXButtonY:LeftButton"
+for i = 1, 15 do
+    ACTION_BUTTON_BINDINGS[#ACTION_BUTTON_BINDINGS + 1] = {
+        prefix = "ElvUI_Bar" .. i .. "Button",
+        commandPrefix = "CLICK ElvUI_Bar" .. i .. "Button",
+        commandSuffix = ":LeftButton",
+    }
+end
+
 local LegacyGetActionTexture = rawget(_G, "GetActionTexture")
 
 local function NormalizeSpellName(name)
@@ -281,7 +290,10 @@ local function RebuildKeybindCache()
 
     for _, bar in ipairs(ACTION_BUTTON_BINDINGS) do
         for btn = 1, 12 do
-            local key = GetPreferredBindingKey(bar.commandPrefix .. btn)
+            local bindCmd = bar.commandSuffix
+                and (bar.commandPrefix .. btn .. bar.commandSuffix)
+                or (bar.commandPrefix .. btn)
+            local key = GetPreferredBindingKey(bindCmd)
             if key then
                 local button = _G[bar.prefix .. btn]
                 local slot = ResolveActionSlotFromButton(button)
