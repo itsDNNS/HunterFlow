@@ -4,9 +4,9 @@
 
 # TrueShot
 
-A World of Warcraft addon for Retail Midnight that layers rotation fixes on top of Blizzard's Assisted Combat system.
+A World of Warcraft addon for Retail Midnight that corrects known blind spots in Blizzard's Assisted Combat system.
 
-Blizzard's built-in rotation helper handles ~95% of ability prioritization correctly. TrueShot identifies the remaining cases where it doesn't and overrides them with cast-event-tracked heuristics, validated against WarcraftLogs data from top-performing players.
+Blizzard's built-in rotation helper gets you started, but it has gaps: wrong AoE priorities, missing shatter combos, stuck cooldown suggestions, and more. TrueShot identifies these cases and overrides them with cast-event-tracked heuristics, validated against WarcraftLogs data from top-performing players.
 
 ## Supported Classes
 
