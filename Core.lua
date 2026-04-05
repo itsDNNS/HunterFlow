@@ -32,6 +32,7 @@ local DEFAULTS = {
     orientation = "LEFT",
     showBackdrop = true,
     showAoeHint = true,
+    showLoginMessage = false,
 }
 
 local optionCallbacks = {}
@@ -140,15 +141,19 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     if event == "PLAYER_ENTERING_WORLD" then
         if TryActivate() then
-            local profile = Engine.activeProfile
-            local name = profile and (profile.displayName or profile.id) or "unknown"
-            print("|cff00ff00[TrueShot]|r Ready to hunt. |cffffff00" .. name .. "|r active. Type |cffffff00/ts help|r for commands.")
+            if TrueShot.GetOpt("showLoginMessage") then
+                local profile = Engine.activeProfile
+                local name = profile and (profile.displayName or profile.id) or "unknown"
+                print("|cff00ff00[TrueShot]|r Ready. |cffffff00" .. name .. "|r active. Type |cffffff00/ts help|r for commands.")
+            end
         else
-            local specID = GetActiveSpecID()
-            if not TrueShot.Profiles[specID or 0] then
-                print("|cffaaaaaa[TrueShot]|r No profile for current spec. Addon inactive.")
-            else
-                print("|cffff0000[TrueShot]|r Assisted Combat not available.")
+            if TrueShot.GetOpt("showLoginMessage") then
+                local specID = GetActiveSpecID()
+                if not TrueShot.Profiles[specID or 0] then
+                    print("|cffaaaaaa[TrueShot]|r No profile for current spec. Addon inactive.")
+                else
+                    print("|cffff0000[TrueShot]|r Assisted Combat not available.")
+                end
             end
         end
         ReconcileVisibility()
@@ -192,7 +197,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local prev = Engine.activeProfile
         TryActivate()
         local curr = Engine.activeProfile
-        if curr and curr ~= prev then
+        if curr and curr ~= prev and TrueShot.GetOpt("showLoginMessage") then
             local name = curr.displayName or curr.id or "unknown"
             print("|cff00ff00[TrueShot]|r Profile switched: " .. name)
         end
@@ -211,7 +216,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             local prevDelayed = Engine.activeProfile
             TryActivate()
             local currDelayed = Engine.activeProfile
-            if currDelayed and currDelayed ~= prevDelayed then
+            if currDelayed and currDelayed ~= prevDelayed and TrueShot.GetOpt("showLoginMessage") then
                 print("|cff00ff00[TrueShot]|r Profile switched: " .. (currDelayed.displayName or currDelayed.id or "unknown"))
             end
             ReconcileVisibility()

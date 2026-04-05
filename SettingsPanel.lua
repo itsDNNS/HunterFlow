@@ -205,11 +205,18 @@ local function CreateSettingsPanel()
         aoeHintDesc, "showOverrideIndicator"
     )
 
+    local loginCheck, loginDesc = CreateCheckbox(
+        content,
+        "Show chat messages on login",
+        "Display profile activation and switch messages in the chat window.",
+        glowDesc, "showLoginMessage"
+    )
+
     local backdropCheck, backdropDesc = CreateCheckbox(
         content,
         "Show Backdrop",
         "Show the dark background behind the queue overlay.",
-        glowDesc, "showBackdrop"
+        loginDesc, "showBackdrop"
     )
 
     local coordInputsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
