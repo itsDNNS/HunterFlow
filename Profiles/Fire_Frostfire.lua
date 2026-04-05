@@ -19,6 +19,7 @@ local Profile = {
     rules = {
         { type = "BLACKLIST", spellID = 118 },     -- Polymorph
         { type = "BLACKLIST", spellID = 30449 },   -- Spellsteal
+        { type = "BLACKLIST", spellID = 1459 },    -- Arcane Intellect
     },
 }
 
