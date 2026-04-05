@@ -4,6 +4,7 @@
 local Engine = TrueShot.Engine
 
 local BW_COOLDOWN = 30
+local WT_COOLDOWN = 10
 
 ------------------------------------------------------------------------
 -- Profile definition
@@ -19,6 +20,7 @@ local Profile = {
     state = {
         lastBWCast = 0,
         lastCastWasKC = false,
+        lastWildThrashCast = 0,
     },
 
     rules = {
@@ -32,7 +34,11 @@ local Profile = {
             type = "PIN",
             spellID = 1264359, -- Wild Thrash
             reason = "AoE 2+",
-            condition = { type = "target_count", op = ">=", value = 2 },
+            condition = {
+                type = "and",
+                left  = { type = "target_count", op = ">=", value = 2 },
+                right = { type = "not", inner = { type = "wt_on_cd" } },
+            },
         },
 
         -- Bestial Wrath: suppress only when on CD (WCL data: top players press BW
@@ -58,6 +64,7 @@ local Profile = {
 
 function Profile:ResetState()
     self.state.lastCastWasKC = false
+    self.state.lastWildThrashCast = 0
 end
 
 function Profile:OnSpellCast(spellID)
@@ -65,6 +72,10 @@ function Profile:OnSpellCast(spellID)
 
     if spellID == 19574 then -- Bestial Wrath
         s.lastBWCast = GetTime()
+        s.lastCastWasKC = false
+
+    elseif spellID == 1264359 then -- Wild Thrash
+        s.lastWildThrashCast = GetTime()
         s.lastCastWasKC = false
 
     elseif spellID == 34026 then -- Kill Command
@@ -77,6 +88,7 @@ end
 
 function Profile:OnCombatEnd()
     self.state.lastCastWasKC = false
+    self.state.lastWildThrashCast = 0
 end
 
 ------------------------------------------------------------------------
@@ -92,6 +104,10 @@ function Profile:EvalCondition(cond)
     elseif cond.type == "bw_on_cd" then
         if s.lastBWCast == 0 then return false end
         return (GetTime() - s.lastBWCast) < BW_COOLDOWN
+
+    elseif cond.type == "wt_on_cd" then
+        if s.lastWildThrashCast == 0 then return false end
+        return (GetTime() - s.lastWildThrashCast) < WT_COOLDOWN
 
     end
 

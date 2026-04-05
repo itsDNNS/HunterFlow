@@ -5,6 +5,7 @@ local Engine = TrueShot.Engine
 
 local BA_COOLDOWN = 10
 local BW_COOLDOWN = 30
+local WT_COOLDOWN = 10
 
 ------------------------------------------------------------------------
 -- Profile definition
@@ -23,6 +24,7 @@ local Profile = {
         witheringFireUntil = 0,
         wailingArrowAvailable = false,
         lastCastWasKC = false,
+        lastWildThrashCast = 0,
     },
 
     rules = {
@@ -75,12 +77,16 @@ local Profile = {
             },
         },
 
-        -- Wild Thrash: AoE preference at 2+ targets (WCL: 79% on-CD in M+, 3.58 CPM)
+        -- Wild Thrash: AoE priority at 2+ targets (WCL: 79% on-CD in M+, 3.58 CPM)
         {
-            type = "PREFER",
+            type = "PIN",
             spellID = 1264359, -- Wild Thrash
             reason = "AoE 2+",
-            condition = { type = "target_count", op = ">=", value = 2 },
+            condition = {
+                type = "and",
+                left  = { type = "target_count", op = ">=", value = 2 },
+                right = { type = "not", inner = { type = "wt_on_cd" } },
+            },
         },
 
         -- Nature's Ally: never Kill Command twice in a row
@@ -102,6 +108,7 @@ function Profile:ResetState()
     self.state.witheringFireUntil = 0
     self.state.wailingArrowAvailable = false
     self.state.lastCastWasKC = false
+    self.state.lastWildThrashCast = 0
 end
 
 function Profile:OnSpellCast(spellID)
@@ -125,6 +132,10 @@ function Profile:OnSpellCast(spellID)
         s.wailingArrowAvailable = false
         s.lastCastWasKC = false
 
+    elseif spellID == 1264359 then -- Wild Thrash
+        s.lastWildThrashCast = now
+        s.lastCastWasKC = false
+
     elseif spellID == 34026 then -- Kill Command
         s.lastCastWasKC = true
 
@@ -143,6 +154,7 @@ end
 function Profile:OnCombatEnd()
     self.state.lastCastWasKC = false
     self.state.witheringFireUntil = 0
+    self.state.lastWildThrashCast = 0
 end
 
 ------------------------------------------------------------------------
@@ -177,6 +189,10 @@ function Profile:EvalCondition(cond)
     elseif cond.type == "bw_on_cd" then
         if s.lastBWCast == 0 then return false end
         return (GetTime() - s.lastBWCast) < BW_COOLDOWN
+
+    elseif cond.type == "wt_on_cd" then
+        if s.lastWildThrashCast == 0 then return false end
+        return (GetTime() - s.lastWildThrashCast) < WT_COOLDOWN
 
     end
 
