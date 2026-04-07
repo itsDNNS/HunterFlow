@@ -188,6 +188,125 @@ function Probe:SpellCharges(spellID)
 end
 
 ------------------------------------------------------------------------
+-- Probe: secrecy audit
+------------------------------------------------------------------------
+
+-- Key spells to check across all supported classes
+local SECRECY_SPELLS = {
+    -- BM Hunter
+    { id = 272790, name = "Frenzy",          type = "aura",     note = "Barbed Shot stacks" },
+    { id = 118455, name = "Beast Cleave",     type = "aura",     note = "AoE cleave buff" },
+    { id = 19574,  name = "Bestial Wrath",    type = "both",     note = "30s burst CD" },
+    { id = 217200, name = "Barbed Shot",      type = "cooldown", note = "2-charge" },
+    { id = 34026,  name = "Kill Command",     type = "cooldown", note = "primary" },
+    { id = 1264359,name = "Wild Thrash",      type = "cooldown", note = "AoE 8s CD" },
+    { id = 466930, name = "Black Arrow",      type = "cooldown", note = "Dark Ranger" },
+    -- Frost Mage
+    { id = 190446, name = "Brain Freeze",     type = "aura",     note = "Flurry proc" },
+    { id = 44544,  name = "Fingers of Frost", type = "aura",     note = "Ice Lance proc" },
+    { id = 84714,  name = "Frozen Orb",       type = "cooldown", note = "burst CD" },
+    -- Fire Mage
+    { id = 48108,  name = "Hot Streak",       type = "aura",     note = "Pyroblast proc" },
+    { id = 48107,  name = "Heating Up",       type = "aura",     note = "pre-Hot Streak" },
+    { id = 190319, name = "Combustion",       type = "both",     note = "burst CD" },
+    -- Arcane Mage
+    { id = 365350, name = "Arcane Surge",     type = "cooldown", note = "burst CD" },
+    -- SV Hunter
+    { id = 1250646,name = "Takedown",         type = "cooldown", note = "burst CD" },
+    { id = 1261193,name = "Boomstick",        type = "cooldown", note = "burst" },
+    -- Feral Druid
+    { id = 5217,   name = "Tiger's Fury",     type = "both",     note = "burst CD" },
+    { id = 106951, name = "Berserk",          type = "both",     note = "burst CD" },
+    -- DH Havoc
+    { id = 191427, name = "Metamorphosis",    type = "both",     note = "burst CD" },
+    -- General
+    { id = 0,      name = "Focus (power)",    type = "power",    note = "Hunter resource" },
+}
+
+function Probe:SecrecyAudit()
+    PrintHeader("secrecy audit (C_Secrets per-spell checks)")
+
+    if not C_Secrets then
+        PrintResult("status", "C_Secrets namespace not available")
+        PrintClassification("IMPOSSIBLE - API missing")
+        return
+    end
+
+    -- General checks
+    if C_Secrets.HasSecretRestrictions then
+        local ok, has = pcall(C_Secrets.HasSecretRestrictions)
+        PrintResult("HasSecretRestrictions", ok and tostring(has) or "ERROR")
+    end
+    if C_Secrets.ShouldAurasBeSecret then
+        local ok, val = pcall(C_Secrets.ShouldAurasBeSecret)
+        PrintResult("ShouldAurasBeSecret (general)", ok and tostring(val) or "ERROR")
+    end
+    if C_Secrets.ShouldCooldownsBeSecret then
+        local ok, val = pcall(C_Secrets.ShouldCooldownsBeSecret)
+        PrintResult("ShouldCooldownsBeSecret (general)", ok and tostring(val) or "ERROR")
+    end
+
+    -- Focus power check
+    if C_Secrets.ShouldUnitPowerBeSecret then
+        local ok, val = pcall(C_Secrets.ShouldUnitPowerBeSecret, "player", 2) -- 2 = Focus
+        PrintResult("Focus power secret", ok and tostring(val) or "ERROR")
+        local ok2, val2 = pcall(C_Secrets.ShouldUnitPowerBeSecret, "player", 0) -- 0 = Mana
+        PrintResult("Mana power secret", ok2 and tostring(val2) or "ERROR")
+    end
+
+    print(" ")
+    print("|cff00ff00[[TS Probe]|r Per-spell secrecy:")
+    print(string.format("  %-20s %-8s %-15s %-15s %s", "Spell", "Type", "Aura Secret?", "CD Secret?", "Note"))
+    print("  " .. string.rep("-", 75))
+
+    for _, spell in ipairs(SECRECY_SPELLS) do
+        if spell.type == "power" then
+            -- Already handled above
+        else
+            local auraResult = "n/a"
+            local cdResult = "n/a"
+
+            if (spell.type == "aura" or spell.type == "both") and C_Secrets.ShouldSpellAuraBeSecret then
+                local ok, val = pcall(C_Secrets.ShouldSpellAuraBeSecret, spell.id)
+                if ok then
+                    auraResult = tostring(val)
+                else
+                    auraResult = "ERROR"
+                end
+            end
+
+            if (spell.type == "cooldown" or spell.type == "both") and C_Secrets.ShouldSpellCooldownBeSecret then
+                local ok, val = pcall(C_Secrets.ShouldSpellCooldownBeSecret, spell.id)
+                if ok then
+                    cdResult = tostring(val)
+                else
+                    cdResult = "ERROR"
+                end
+            end
+
+            -- Also try GetSpellAuraSecrecy for the level
+            local auraLevel = ""
+            if (spell.type == "aura" or spell.type == "both") and C_Secrets.GetSpellAuraSecrecy then
+                local ok, level = pcall(C_Secrets.GetSpellAuraSecrecy, spell.id)
+                if ok then
+                    if level == 0 then auraLevel = " [NEVER]"
+                    elseif level == 1 then auraLevel = " [ALWAYS]"
+                    elseif level == 2 then auraLevel = " [CONTEXT]"
+                    else auraLevel = " [" .. tostring(level) .. "]" end
+                end
+            end
+
+            print(string.format("  %-20s %-8s %-15s %-15s %s",
+                spell.name, spell.type, auraResult .. auraLevel, cdResult, spell.note))
+        end
+    end
+
+    print(" ")
+    print("|cff00ff00[[TS Probe]|r Non-secret auras can be read with C_UnitAuras.GetAuraDataBySpellName()")
+    print("  Non-secret cooldowns can be read with C_Spell.GetSpellCooldown()")
+end
+
+------------------------------------------------------------------------
 -- Probe: run all
 ------------------------------------------------------------------------
 
@@ -214,6 +333,8 @@ function Probe:HandleCommand(args)
     elseif sub == "charges" then
         local spellID = tonumber(args:match("%S+%s+(%d+)"))
         self:SpellCharges(spellID)
+    elseif sub == "secrecy" then
+        self:SecrecyAudit()
     elseif sub == "all" then
         local spellID = tonumber(args:match("%S+%s+(%d+)"))
         self:RunAll(spellID)
@@ -222,6 +343,7 @@ function Probe:HandleCommand(args)
         print("  /ts probe target   - Test UnitCastingInfo / UnitChannelInfo")
         print("  /ts probe plates   - Test C_NamePlate.GetNamePlates")
         print("  /ts probe charges [spellID]  - Test C_Spell.GetSpellCharges (default: Barbed Shot)")
+        print("  /ts probe secrecy  - Audit per-spell aura/cooldown secrecy levels")
         print("  /ts probe all [spellID]      - Run all probes")
     else
         print("|cff00ff00[[TS Probe]|r Unknown probe: " .. sub .. ". Use /ts probe help")
