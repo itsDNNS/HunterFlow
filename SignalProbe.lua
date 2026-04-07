@@ -317,32 +317,34 @@ local AURA_TEST_SPELLS = {
 }
 
 function Probe:AuraRead()
-    PrintHeader("aura read (C_UnitAuras.GetAuraDataBySpellName)")
+    PrintHeader("aura read (all player buffs)")
 
-    if not C_UnitAuras or not C_UnitAuras.GetAuraDataBySpellName then
-        PrintResult("status", "C_UnitAuras.GetAuraDataBySpellName not available")
+    if not C_UnitAuras or not C_UnitAuras.GetBuffDataByIndex then
+        PrintResult("status", "C_UnitAuras.GetBuffDataByIndex not available")
         return
     end
 
-    -- Try reading all known buff names
+    -- Iterate ALL player buffs by index
     local anyFound = false
-    for _, spell in ipairs(AURA_TEST_SPELLS) do
-        for _, name in ipairs(spell.names) do
-            local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", name)
-            if ok and aura then
-                anyFound = true
-                local stacks = aura.applications or 0
-                local remaining = aura.expirationTime and (aura.expirationTime - GetTime()) or 0
-                PrintResult(name, "stacks=" .. stacks
-                    .. " remaining=" .. string.format("%.1fs", remaining)
-                    .. " spellID=" .. tostring(aura.spellId)
-                    .. " secret=" .. SecretLabel(aura.applications))
-            elseif ok then
-                PrintResult(name, "nil (buff not active)")
-            else
-                PrintResult(name, "ERROR: " .. tostring(aura))
-            end
-        end
+    local TARGET_IDS = { [272790]=true, [118455]=true, [19574]=true, [190446]=true, [44544]=true, [48108]=true, [48107]=true }
+    print("  All player buffs:")
+    for i = 1, 40 do
+        local ok, aura = pcall(C_UnitAuras.GetBuffDataByIndex, "player", i)
+        if not ok or not aura then break end
+        local name = aura.name or "?"
+        local sid = aura.spellId or 0
+        local stacks = aura.applications or 0
+        local remaining = aura.expirationTime and (aura.expirationTime - GetTime()) or 0
+        local nameSecret = SecretLabel(aura.name)
+        local stackSecret = SecretLabel(aura.applications)
+        local marker = TARGET_IDS[sid] and " <<<" or ""
+        print(string.format("    %2d: %s (%d) stacks=%s rem=%.1fs [name:%s stacks:%s]%s",
+            i, tostring(name), sid, tostring(stacks), remaining, nameSecret, stackSecret, marker))
+        anyFound = true
+    end
+
+    if not anyFound then
+        print("    (no buffs found)")
     end
 
     -- Also try reading cooldowns
