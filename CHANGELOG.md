@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.15.1 - 2026-04-07
+## v0.16.3 - 2026-04-07
 
 ### Added
 - BM Dark Ranger / Pack Leader: Buffed Kill Command (proc glow) now pinned as priority 1
