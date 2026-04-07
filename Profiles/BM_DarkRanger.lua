@@ -190,7 +190,10 @@ function Profile:EvalCondition(cond)
 
     elseif cond.type == "wa_available" then
         -- Glow signal: WA glowing means Blizzard confirms it's available
-        if TrueShot.Engine:IsSpellGlowing(392060) then return true end
+        if TrueShot.Engine:IsSpellGlowing(392060) then
+            s.wailingArrowAvailable = true
+            return true
+        end
         return s.wailingArrowAvailable
 
     elseif cond.type == "last_cast_was_kc" then

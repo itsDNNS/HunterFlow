@@ -70,7 +70,14 @@ local _glowingSpells = {}
 local _glowFrame = CreateFrame("Frame")
 _glowFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
 _glowFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
+_glowFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+_glowFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 _glowFrame:SetScript("OnEvent", function(_, event, spellID)
+    if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_ENABLED" then
+        -- Clear stale glow state on lifecycle boundaries (guards against missed GLOW_HIDE)
+        wipe(_glowingSpells)
+        return
+    end
     if not spellID or IsSecret(spellID) then return end
     if event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" then
         _glowingSpells[spellID] = true
@@ -80,16 +87,16 @@ _glowFrame:SetScript("OnEvent", function(_, event, spellID)
 end)
 
 function Engine:IsSpellGlowing(spellID)
-    if _glowingSpells[spellID] then return true end
-    -- Fallback: poll IsSpellOverlayed for spells that might have been glowing before we loaded
+    -- Always revalidate via poll (guards against stale cache)
     if C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed then
         local ok, result = pcall(C_SpellActivationOverlay.IsSpellOverlayed, spellID)
-        if ok and result == true and not IsSecret(result) then
-            _glowingSpells[spellID] = true
-            return true
+        if ok and not IsSecret(result) then
+            _glowingSpells[spellID] = result == true or nil
+            return result == true
         end
     end
-    return false
+    -- Fallback to cached event state if poll unavailable
+    return _glowingSpells[spellID] == true
 end
 
 ------------------------------------------------------------------------
