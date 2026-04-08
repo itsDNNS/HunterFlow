@@ -1,8 +1,9 @@
--- TrueShot Settings: native Game Options category for lightweight addon config
+-- TrueShot Settings: native Game Options with subcategory tabs
 
 TrueShot = TrueShot or {}
 
 local settingsCategory
+local subCategories = {}
 
 local function OpenRegisteredCategory()
     if not settingsCategory or not Settings or not Settings.OpenToCategory then return end
@@ -13,6 +14,17 @@ local function OpenRegisteredCategory()
     else
         Settings.OpenToCategory("TrueShot")
     end
+end
+
+------------------------------------------------------------------------
+-- Widget factories (shared across all panels)
+------------------------------------------------------------------------
+
+local function CreateSectionHeader(parent, text, relativeTo, yOffset)
+    local header = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    header:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", 0, yOffset or -20)
+    header:SetText(text)
+    return header
 end
 
 local function CreateCheckbox(parent, label, description, relativeTo, key)
@@ -91,169 +103,285 @@ local function CreateCoordinateEditBox(parent, anchorTo, xOffset)
     return box
 end
 
-local function CreateSettingsPanel()
-    local panel = CreateFrame("Frame", "TrueShotSettingsPanel", UIParent)
-    panel.name = "TrueShot"
+local function CreatePanelFrame()
+    local panel = CreateFrame("Frame")
     panel:SetSize(640, 800)
+    return panel
+end
 
-    -- ScrollFrame wrapping all content
-    local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
-    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 0)
+local function CreatePanelTitle(parent, titleText, subtitleText)
+    local title = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")
+    title:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, -16)
+    title:SetText(titleText)
 
-    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetSize(600, 1)
-    scrollFrame:SetScrollChild(scrollChild)
-
-    -- Track scroll child width to match scroll frame after layout
-    scrollFrame:SetScript("OnSizeChanged", function(self, w)
-        scrollChild:SetWidth(w)
-    end)
-
-    -- All controls parent to scrollChild instead of panel
-    local content = scrollChild
-
-    local title = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")
-    title:SetPoint("TOPLEFT", content, "TOPLEFT", 16, -16)
-    title:SetText("TrueShot")
-
-    local subtitle = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local subtitle = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    subtitle:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+    subtitle:SetPoint("RIGHT", parent, "RIGHT", -16, 0)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Midnight-compatible rotation overlay on top of Blizzard Assisted Combat.")
+    subtitle:SetText(subtitleText)
 
-    -- Display
+    return title, subtitle
+end
+
+------------------------------------------------------------------------
+-- Tab 1: General
+------------------------------------------------------------------------
+
+local function CreateGeneralPanel()
+    local panel = CreatePanelFrame()
+    local _, subtitle = CreatePanelTitle(panel, "General",
+        "Basic overlay behavior and visibility.")
+
     local lockCheck, lockDesc = CreateCheckbox(
-        content,
-        "Lock overlay frame",
+        panel, "Lock overlay frame",
         "Disable dragging and make the overlay click-through.",
         subtitle, "locked"
     )
 
     local enemyCheck, enemyDesc = CreateCheckbox(
-        content,
-        "Show only on enemy target",
+        panel, "Show only on enemy target",
         "Show the overlay only when you have a hostile target selected. Implies combat-only behavior.",
         lockDesc, "enemyTargetOnly"
     )
 
     local combatCheck, combatDesc = CreateCheckbox(
-        content,
-        "Show only in combat",
+        panel, "Show only in combat",
         "Hide the overlay outside of combat. Ignored when 'Show only on enemy target' is active.",
         enemyDesc, "combatOnly"
     )
 
+    local loginCheck, loginDesc = CreateCheckbox(
+        panel, "Show chat messages on login",
+        "Display profile activation and switch messages in the chat window.",
+        combatDesc, "showLoginMessage"
+    )
+
+    -- Utility section
+    local utilHeader = CreateSectionHeader(panel, "Utility", loginDesc, -20)
+
+    local unlockButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    unlockButton:SetSize(160, 24)
+    unlockButton:SetPoint("TOPLEFT", utilHeader, "BOTTOMLEFT", 0, -10)
+    unlockButton:SetText("Unlock And Recenter")
+    unlockButton:SetScript("OnClick", function()
+        TrueShot.SetOpt("locked", false)
+        if TrueShot.Display and TrueShot.Display.ResetPosition then
+            TrueShot.Display:ResetPosition()
+            TrueShot.Display:SetClickThrough(false)
+        end
+        lockCheck:SetChecked(false)
+    end)
+
+    local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    hint:SetPoint("TOPLEFT", unlockButton, "BOTTOMLEFT", 0, -10)
+    hint:SetPoint("RIGHT", panel, "RIGHT", -24, 0)
+    hint:SetJustifyH("LEFT")
+    hint:SetText("For diagnostics and debugging, use /ts debug and /ts probe commands.")
+
+    panel:SetScript("OnShow", function()
+        lockCheck.sync()
+        enemyCheck.sync()
+        combatCheck.sync()
+        loginCheck.sync()
+    end)
+
+    return panel
+end
+
+------------------------------------------------------------------------
+-- Tab 2: Appearance
+------------------------------------------------------------------------
+
+local function CreateAppearancePanel()
+    local panel = CreatePanelFrame()
+    local _, subtitle = CreatePanelTitle(panel, "Appearance",
+        "Size, transparency, and layout of the overlay.")
+
     local scaleSlider, scaleDesc = CreateSlider(
-        content, "Overlay scale", "Size of the overlay icons.",
-        combatDesc, "overlayScale", 0.5, 2.0, 0.1
+        panel, "Overlay scale", "Size of the overlay icons.",
+        subtitle, "overlayScale", 0.5, 2.0, 0.1
     )
 
     local opacitySlider, opacityDesc = CreateSlider(
-        content, "Overlay opacity", "Transparency of the overlay.",
+        panel, "Overlay opacity", "Transparency of the overlay.",
         scaleDesc, "overlayOpacity", 0.3, 1.0, 0.1
     )
 
-    -- Features
+    local backdropCheck, backdropDesc = CreateCheckbox(
+        panel, "Show Backdrop",
+        "Show the dark background behind the queue overlay.",
+        opacityDesc, "showBackdrop"
+    )
+
+    -- Orientation
+    local orientLabel = CreateSectionHeader(panel, "Queue Orientation", backdropDesc, -20)
+
+    local orientDropdown = CreateFrame("Frame", "TrueShotOrientDropdown", panel,
+        "UIDropDownMenuTemplate")
+    orientDropdown:SetPoint("TOPLEFT", orientLabel, "BOTTOMLEFT", -16, -4)
+    UIDropDownMenu_SetWidth(orientDropdown, 120)
+
+    local orientOptions = { "LEFT", "RIGHT", "UP", "DOWN" }
+    UIDropDownMenu_Initialize(orientDropdown, function(self, level)
+        for _, opt in ipairs(orientOptions) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt
+            info.checked = (TrueShot.GetOpt("orientation") == opt)
+            info.func = function()
+                TrueShot.SetOpt("orientation", opt)
+                UIDropDownMenu_SetText(orientDropdown, opt)
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    UIDropDownMenu_SetText(orientDropdown, TrueShot.GetOpt("orientation"))
+
+    -- First Icon Scale
+    local fisLabel = CreateSectionHeader(panel, "First Icon Scale", orientDropdown, -18)
+
+    local fisSlider = CreateFrame("Slider", "TrueShotFirstIconScale", panel,
+        "OptionsSliderTemplate")
+    fisSlider:SetPoint("TOPLEFT", fisLabel, "BOTTOMLEFT", 0, -12)
+    fisSlider:SetSize(180, 16)
+    fisSlider:SetMinMaxValues(1.0, 2.0)
+    fisSlider:SetValueStep(0.1)
+    fisSlider:SetObeyStepOnDrag(true)
+    fisSlider:SetValue(TrueShot.GetOpt("firstIconScale"))
+    fisSlider.Low:SetText("1.0")
+    fisSlider.High:SetText("2.0")
+    fisSlider.Text:SetText(string.format("%.1f", TrueShot.GetOpt("firstIconScale")))
+    fisSlider:SetScript("OnValueChanged", function(self, value)
+        value = math.floor(value * 10 + 0.5) / 10
+        TrueShot.SetOpt("firstIconScale", value)
+        self.Text:SetText(string.format("%.1f", value))
+    end)
+
+    panel:SetScript("OnShow", function()
+        scaleSlider.sync()
+        opacitySlider.sync()
+        backdropCheck.sync()
+        UIDropDownMenu_SetText(orientDropdown, TrueShot.GetOpt("orientation"))
+        local fis = TrueShot.GetOpt("firstIconScale") or 1.3
+        fisSlider:SetValue(fis)
+        fisSlider.Text:SetText(string.format("%.1f", fis))
+    end)
+
+    return panel
+end
+
+------------------------------------------------------------------------
+-- Tab 3: Features
+------------------------------------------------------------------------
+
+local function CreateFeaturesPanel()
+    local panel = CreatePanelFrame()
+    local _, subtitle = CreatePanelTitle(panel, "Features",
+        "Toggle overlay features and visual feedback.")
+
     local castCheck, castDesc = CreateCheckbox(
-        content,
-        "Show cast success feedback",
+        panel, "Show cast success feedback",
         "Flash the icon briefly when your cast matches the recommendation.",
-        opacityDesc, "showCastFeedback"
+        subtitle, "showCastFeedback"
     )
 
     local cooldownCheck, cooldownDesc = CreateCheckbox(
-        content,
-        "Show cooldown swipes (best-effort)",
+        panel, "Show cooldown swipes (best-effort)",
         "Display cooldown sweep when readable. Not a promise of exact Midnight cooldown truth.",
         castDesc, "showCooldownSwipe"
     )
 
     local keybindCheck, keybindDesc = CreateCheckbox(
-        content,
-        "Show keybindings",
+        panel, "Show keybindings",
         "Display the keybinding text on each icon.",
         cooldownDesc, "showKeybinds"
     )
 
     local rangeCheck, rangeDesc = CreateCheckbox(
-        content,
-        "Show range indicator",
+        panel, "Show range indicator",
         "Tint the primary icon red when your target is out of range.",
         keybindDesc, "showRangeIndicator"
     )
 
     local whyCheck, whyDesc = CreateCheckbox(
-        content,
-        "Show recommendation reason",
+        panel, "Show recommendation reason",
         "Display a label below the primary icon explaining why it was recommended (e.g. Withering Fire, Charge Dump).",
         rangeDesc, "showWhyOverlay"
     )
 
     local aoeHintCheck, aoeHintDesc = CreateCheckbox(
-        content,
-        "Show AoE hint icon",
+        panel, "Show AoE hint icon",
         "Display a secondary icon below the primary icon when an AoE ability is recommended (e.g. Wild Thrash at 2+ targets).",
         whyDesc, "showAoeHint"
     )
 
     local glowCheck, glowDesc = CreateCheckbox(
-        content,
-        "Show override glow",
+        panel, "Show override glow",
         "Pulsing glow on the first icon when TrueShot overrides Assisted Combat (cyan for PIN, blue for PREFER).",
         aoeHintDesc, "showOverrideIndicator"
     )
 
-    local loginCheck, loginDesc = CreateCheckbox(
-        content,
-        "Show chat messages on login",
-        "Display profile activation and switch messages in the chat window.",
-        glowDesc, "showLoginMessage"
-    )
-
-    local backdropCheck, backdropDesc = CreateCheckbox(
-        content,
-        "Show Backdrop",
-        "Show the dark background behind the queue overlay.",
-        loginDesc, "showBackdrop"
-    )
+    -- Performance section
+    local perfHeader = CreateSectionHeader(panel, "Performance Tracking", glowDesc, -20)
 
     local scorecardCheck, scorecardDesc = CreateCheckbox(
-        content,
+        panel,
         "Show alignment scorecard",
         "Display a rotation alignment report in chat after each combat (min 8s fight, 5+ casts).",
-        backdropDesc, "showScorecard"
+        perfHeader, "showScorecard"
     )
 
     local heartbeatCheck, heartbeatDesc = CreateCheckbox(
-        content,
+        panel,
         "Show GCD heartbeat",
         "Display a scrolling rhythm strip below the overlay showing cast alignment in real-time.",
         scorecardDesc, "showHeartbeat"
     )
 
-    local coordInputsLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    coordInputsLabel:SetPoint("TOPLEFT", heartbeatDesc, "BOTTOMLEFT", 0, -10)
+    panel:SetScript("OnShow", function()
+        castCheck.sync()
+        cooldownCheck.sync()
+        keybindCheck.sync()
+        rangeCheck.sync()
+        whyCheck.sync()
+        aoeHintCheck.sync()
+        glowCheck.sync()
+        scorecardCheck.sync()
+        heartbeatCheck.sync()
+    end)
+
+    return panel
+end
+
+------------------------------------------------------------------------
+-- Tab 4: Position
+------------------------------------------------------------------------
+
+local function CreatePositionPanel()
+    local panel = CreatePanelFrame()
+    local _, subtitle = CreatePanelTitle(panel, "Position",
+        "Overlay frame position and reset controls.")
+
+    local coordInputsLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    coordInputsLabel:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -16)
     coordInputsLabel:SetText("Position offsets (UIParent)")
 
-    local coordInputsRow = CreateFrame("Frame", nil, content)
+    local coordInputsRow = CreateFrame("Frame", nil, panel)
     coordInputsRow:SetSize(420, 22)
     coordInputsRow:SetPoint("TOPLEFT", coordInputsLabel, "BOTTOMLEFT", 0, -6)
 
-    local xLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local xLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     xLabel:SetPoint("LEFT", coordInputsRow, "LEFT", 0, 0)
     xLabel:SetText("X")
 
-    local xEdit = CreateCoordinateEditBox(content, xLabel, 6)
+    local xEdit = CreateCoordinateEditBox(panel, xLabel, 6)
 
-    local yLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local yLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     yLabel:SetPoint("LEFT", xEdit, "RIGHT", 14, 0)
     yLabel:SetText("Y")
 
-    local yEdit = CreateCoordinateEditBox(content, yLabel, 6)
+    local yEdit = CreateCoordinateEditBox(panel, yLabel, 6)
 
-    local applyCoordsButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    local applyCoordsButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     applyCoordsButton:SetSize(92, 20)
     applyCoordsButton:SetPoint("LEFT", yEdit, "RIGHT", 14, 0)
     applyCoordsButton:SetText("Apply")
@@ -315,103 +443,8 @@ local function CreateSettingsPanel()
     end)
     applyCoordsButton:SetScript("OnClick", ApplyPositionFromInputs)
 
-    -- Orientation
-    local orientLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    orientLabel:SetPoint("TOPLEFT", coordInputsRow, "BOTTOMLEFT", 0, -16)
-    orientLabel:SetText("Queue Orientation")
-
-    local orientDropdown = CreateFrame("Frame", "TrueShotOrientDropdown", content,
-        "UIDropDownMenuTemplate")
-    orientDropdown:SetPoint("TOPLEFT", orientLabel, "BOTTOMLEFT", -16, -4)
-    UIDropDownMenu_SetWidth(orientDropdown, 120)
-
-    local orientOptions = { "LEFT", "RIGHT", "UP", "DOWN" }
-    UIDropDownMenu_Initialize(orientDropdown, function(self, level)
-        for _, opt in ipairs(orientOptions) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = opt
-            info.checked = (TrueShot.GetOpt("orientation") == opt)
-            info.func = function()
-                TrueShot.SetOpt("orientation", opt)
-                UIDropDownMenu_SetText(orientDropdown, opt)
-            end
-            UIDropDownMenu_AddButton(info)
-        end
-    end)
-    UIDropDownMenu_SetText(orientDropdown, TrueShot.GetOpt("orientation"))
-
-    -- First Icon Scale
-    local fisLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    fisLabel:SetPoint("TOPLEFT", orientDropdown, "BOTTOMLEFT", 16, -18)
-    fisLabel:SetText("First Icon Scale")
-
-    local fisSlider = CreateFrame("Slider", "TrueShotFirstIconScale", content,
-        "OptionsSliderTemplate")
-    fisSlider:SetPoint("TOPLEFT", fisLabel, "BOTTOMLEFT", 0, -12)
-    fisSlider:SetSize(180, 16)
-    fisSlider:SetMinMaxValues(1.0, 2.0)
-    fisSlider:SetValueStep(0.1)
-    fisSlider:SetObeyStepOnDrag(true)
-    fisSlider:SetValue(TrueShot.GetOpt("firstIconScale"))
-    fisSlider.Low:SetText("1.0")
-    fisSlider.High:SetText("2.0")
-    fisSlider.Text:SetText(string.format("%.1f", TrueShot.GetOpt("firstIconScale")))
-    fisSlider:SetScript("OnValueChanged", function(self, value)
-        value = math.floor(value * 10 + 0.5) / 10
-        TrueShot.SetOpt("firstIconScale", value)
-        self.Text:SetText(string.format("%.1f", value))
-    end)
-
-    -- Utility
-    local unlockButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-    unlockButton:SetSize(160, 24)
-    unlockButton:SetPoint("TOPLEFT", fisSlider, "BOTTOMLEFT", 0, -18)
-    unlockButton:SetText("Unlock And Recenter")
-    unlockButton:SetScript("OnClick", function()
-        TrueShot.SetOpt("locked", false)
-        if TrueShot.Display and TrueShot.Display.ResetPosition then
-            TrueShot.Display:ResetPosition()
-            TrueShot.Display:SetClickThrough(false)
-        end
-        lockCheck:SetChecked(false)
-    end)
-
-    local hint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", unlockButton, "BOTTOMLEFT", 0, -10)
-    hint:SetPoint("RIGHT", content, "RIGHT", -24, 0)
-    hint:SetJustifyH("LEFT")
-    hint:SetText("For diagnostics and debugging, use /ts debug and /ts probe commands.")
-
-    -- Dynamically size scroll child height from content
-    local function UpdateScrollChildHeight()
-        local top = scrollChild:GetTop()
-        local bottom = hint:GetBottom()
-        if top and bottom then
-            scrollChild:SetHeight(top - bottom + 30)
-        end
-    end
-
     panel:SetScript("OnShow", function()
-        C_Timer.After(0, UpdateScrollChildHeight)
-        lockCheck.sync()
-        enemyCheck.sync()
-        combatCheck.sync()
-        scaleSlider.sync()
-        opacitySlider.sync()
-        castCheck.sync()
-        cooldownCheck.sync()
-        keybindCheck.sync()
-        rangeCheck.sync()
-        whyCheck.sync()
-        aoeHintCheck.sync()
-        backdropCheck.sync()
-        scorecardCheck.sync()
-        heartbeatCheck.sync()
         SyncPositionEditBoxes()
-        UIDropDownMenu_SetText(orientDropdown, TrueShot.GetOpt("orientation"))
-        local fis = TrueShot.GetOpt("firstIconScale") or 1.3
-        fisSlider:SetValue(fis)
-        fisSlider.Text:SetText(string.format("%.1f", fis))
     end)
 
     panel:SetScript("OnUpdate", function(_, elapsed)
@@ -425,14 +458,255 @@ local function CreateSettingsPanel()
     return panel
 end
 
+------------------------------------------------------------------------
+-- Tab 5: Profiles
+------------------------------------------------------------------------
+
+-- Spec ID to class/spec display names
+local SPEC_INFO = {
+    [253]  = { class = "Hunter",       spec = "Beast Mastery" },
+    [254]  = { class = "Hunter",       spec = "Marksmanship" },
+    [255]  = { class = "Hunter",       spec = "Survival" },
+    [577]  = { class = "Demon Hunter", spec = "Havoc" },
+    [1480] = { class = "Demon Hunter", spec = "Devourer" },
+    [102]  = { class = "Druid",        spec = "Balance" },
+    [103]  = { class = "Druid",        spec = "Feral" },
+    [62]   = { class = "Mage",         spec = "Arcane" },
+    [63]   = { class = "Mage",         spec = "Fire" },
+    [64]   = { class = "Mage",         spec = "Frost" },
+}
+
+-- Class display order
+local CLASS_ORDER = { "Hunter", "Demon Hunter", "Druid", "Mage" }
+
+-- Class colors (WoW standard)
+local CLASS_COLORS = {
+    ["Hunter"]       = "abd473",
+    ["Demon Hunter"] = "a330c9",
+    ["Druid"]        = "ff7c0a",
+    ["Mage"]         = "3fc7eb",
+}
+
+local MAX_PROFILE_ROWS = 30  -- pre-allocate pool (22 profiles + headroom)
+
+local function CreateProfilesPanel()
+    local panel = CreatePanelFrame()
+
+    -- ScrollFrame for profile list
+    local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 0)
+
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetSize(600, 1)
+    scrollFrame:SetScrollChild(scrollChild)
+
+    scrollFrame:SetScript("OnSizeChanged", function(self, w)
+        scrollChild:SetWidth(w)
+    end)
+
+    local _, subtitle = CreatePanelTitle(scrollChild, "Profiles",
+        "All registered rotation profiles. The active profile is highlighted.")
+
+    -- Pre-allocate class header pool (one per class)
+    local classHeaders = {}
+    for i = 1, #CLASS_ORDER do
+        local header = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        header:Hide()
+        classHeaders[i] = header
+    end
+
+    -- Pre-allocate row pool
+    local rowPool = {}
+    for i = 1, MAX_PROFILE_ROWS do
+        local row = CreateFrame("Frame", nil, scrollChild)
+        row:SetSize(560, 20)
+        row:Hide()
+
+        row.nameText = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        row.nameText:SetPoint("LEFT", row, "LEFT", 12, 0)
+
+        row.specText = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        row.specText:SetPoint("LEFT", row, "LEFT", 260, 0)
+
+        rowPool[i] = row
+    end
+
+    local emptyText = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    emptyText:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -16)
+    emptyText:SetText("No profiles registered.")
+    emptyText:Hide()
+
+    local function SyncProfileList()
+        -- Hide all pooled elements
+        for _, header in ipairs(classHeaders) do header:Hide() end
+        for _, row in ipairs(rowPool) do row:Hide() end
+        emptyText:Hide()
+
+        local lastElement = subtitle
+        local activeProfile = TrueShot.Engine and TrueShot.Engine.activeProfile
+        local rowIndex = 0
+        local headerIndex = 0
+        local hasProfiles = false
+
+        -- Group profiles by class
+        local byClass = {}
+        for specID, profiles in pairs(TrueShot.Profiles or {}) do
+            local info = SPEC_INFO[specID]
+            if info then
+                if not byClass[info.class] then
+                    byClass[info.class] = {}
+                end
+                for _, profile in ipairs(profiles) do
+                    table.insert(byClass[info.class], {
+                        profile = profile,
+                        spec = info.spec,
+                    })
+                end
+            end
+        end
+
+        for _, className in ipairs(CLASS_ORDER) do
+            local profiles = byClass[className]
+            if profiles and #profiles > 0 then
+                hasProfiles = true
+                local color = CLASS_COLORS[className] or "ffffff"
+
+                headerIndex = headerIndex + 1
+                local classHeader = classHeaders[headerIndex]
+                if classHeader then
+                    classHeader:ClearAllPoints()
+                    classHeader:SetPoint("TOPLEFT", lastElement, "BOTTOMLEFT", 0, -18)
+                    classHeader:SetText("|cff" .. color .. className .. "|r")
+                    classHeader:Show()
+                    lastElement = classHeader
+                end
+
+                -- Sort profiles by spec then display name
+                table.sort(profiles, function(a, b)
+                    if a.spec ~= b.spec then return a.spec < b.spec end
+                    return (a.profile.displayName or a.profile.id) < (b.profile.displayName or b.profile.id)
+                end)
+
+                for _, entry in ipairs(profiles) do
+                    rowIndex = rowIndex + 1
+                    if rowIndex > MAX_PROFILE_ROWS then break end
+
+                    local p = entry.profile
+                    local isActive = (p == activeProfile)
+                    local name = p.displayName or p.id or "Unknown"
+
+                    local row = rowPool[rowIndex]
+                    row:ClearAllPoints()
+                    row:SetPoint("TOPLEFT", lastElement, "BOTTOMLEFT", 0, -6)
+
+                    local fontObj = isActive
+                        and GameFontGreen
+                        or GameFontHighlight
+                    row.nameText:SetFontObject(fontObj)
+
+                    if isActive then
+                        row.nameText:SetText(name .. "  |cff00ff00(active)|r")
+                    else
+                        row.nameText:SetText(name)
+                    end
+
+                    row.specText:SetText("|cffaaaaaa" .. entry.spec .. "|r")
+                    row:Show()
+                    lastElement = row
+                end
+            end
+        end
+
+        if not hasProfiles then
+            emptyText:Show()
+            lastElement = emptyText
+        end
+
+        -- Update scroll child height
+        C_Timer.After(0, function()
+            local top = scrollChild:GetTop()
+            local bottom = lastElement and lastElement:GetBottom()
+            if top and bottom then
+                scrollChild:SetHeight(top - bottom + 30)
+            end
+        end)
+    end
+
+    panel:SetScript("OnShow", SyncProfileList)
+
+    return panel
+end
+
+------------------------------------------------------------------------
+-- Landing page (main category)
+------------------------------------------------------------------------
+
+local function CreateLandingPanel()
+    local panel = CreatePanelFrame()
+    local _, subtitle = CreatePanelTitle(panel, "TrueShot",
+        "Midnight-compatible rotation overlay on top of Blizzard Assisted Combat.")
+
+    local versionText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    versionText:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -16)
+
+    local version = C_AddOns and C_AddOns.GetAddOnMetadata
+        and C_AddOns.GetAddOnMetadata("TrueShot", "Version")
+        or (GetAddOnMetadata and GetAddOnMetadata("TrueShot", "Version"))
+        or "unknown"
+    versionText:SetText("Version: |cffffff00" .. version .. "|r")
+
+    local profileLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    profileLabel:SetPoint("TOPLEFT", versionText, "BOTTOMLEFT", 0, -8)
+
+    local helpText = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    helpText:SetPoint("TOPLEFT", profileLabel, "BOTTOMLEFT", 0, -20)
+    helpText:SetPoint("RIGHT", panel, "RIGHT", -24, 0)
+    helpText:SetJustifyH("LEFT")
+    helpText:SetText("Use the subcategories in the sidebar to configure TrueShot.\n\nSlash commands: /ts help")
+
+    panel:SetScript("OnShow", function()
+        local active = TrueShot.Engine and TrueShot.Engine.activeProfile
+        if active then
+            local name = active.displayName or active.id or "unknown"
+            profileLabel:SetText("Active profile: |cff00ff00" .. name .. "|r")
+        else
+            profileLabel:SetText("Active profile: |cffaaaaaa(none)|r")
+        end
+    end)
+
+    return panel
+end
+
+------------------------------------------------------------------------
+-- Registration
+------------------------------------------------------------------------
+
 local function RegisterSettingsPanel()
-    if settingsCategory or not Settings or not Settings.RegisterCanvasLayoutCategory or not Settings.RegisterAddOnCategory then
+    if settingsCategory or not Settings
+        or not Settings.RegisterCanvasLayoutCategory
+        or not Settings.RegisterAddOnCategory
+        or not Settings.RegisterCanvasLayoutSubcategory then
         return
     end
 
-    local panel = CreateSettingsPanel()
-    settingsCategory = Settings.RegisterCanvasLayoutCategory(panel, "TrueShot")
+    local landingPanel = CreateLandingPanel()
+    settingsCategory = Settings.RegisterCanvasLayoutCategory(landingPanel, "TrueShot")
     Settings.RegisterAddOnCategory(settingsCategory)
+
+    local tabs = {
+        { name = "General",    factory = CreateGeneralPanel },
+        { name = "Appearance", factory = CreateAppearancePanel },
+        { name = "Features",   factory = CreateFeaturesPanel },
+        { name = "Position",   factory = CreatePositionPanel },
+        { name = "Profiles",   factory = CreateProfilesPanel },
+    }
+
+    for _, tab in ipairs(tabs) do
+        local panel = tab.factory()
+        local sub = Settings.RegisterCanvasLayoutSubcategory(settingsCategory, panel, tab.name)
+        subCategories[tab.name] = sub
+    end
 end
 
 function TrueShot.OpenSettingsPanel()

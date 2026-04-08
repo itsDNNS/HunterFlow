@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.18.0 - 2026-04-08
+
+### Changed
+- **Settings panel restructured**: Replaced single scrollable list with 5 subcategory tabs in the Game Options sidebar (General, Appearance, Features, Position, Profiles). Uses native `Settings.RegisterCanvasLayoutSubcategory` API.
+- **New Profiles tab**: Read-only overview of all 22 registered profiles grouped by class (Hunter, Demon Hunter, Druid, Mage) with active profile highlighted in green.
+- **Landing page**: Shows addon version and currently active profile at a glance.
+- Scorecard and Heartbeat settings grouped under a "Performance Tracking" section header in the Features tab.
+
 ## v0.17.0 - 2026-04-08
 
 ### Added
