@@ -828,8 +828,16 @@ end
 local _hintText = nil  -- reusable hint FontString
 
 -- Recursively disable all interactive controls in a frame tree (read-only mode)
+-- For ScrollFrames: recurse into the scroll child (editor content) but skip
+-- the scrollbar children to preserve scroll functionality
 local function DisableFrameTree(frame)
     if not frame then return end
+    if frame:IsObjectType("ScrollFrame") then
+        -- Only recurse into the scroll child, not the scrollbar
+        local scrollChild = frame:GetScrollChild()
+        if scrollChild then DisableFrameTree(scrollChild) end
+        return
+    end
     local objType = frame:IsObjectType("Button") and "Button"
         or frame:IsObjectType("EditBox") and "EditBox"
         or nil
