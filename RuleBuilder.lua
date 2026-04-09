@@ -634,6 +634,23 @@ function RuleBuilder:UpdateButtonStates()
     _mainFrame._addVarBtn:SetShown(_isCustomized)
 end
 
+------------------------------------------------------------------------
+-- Editor frame tracking (must be before ClearRightPanel)
+------------------------------------------------------------------------
+
+local function ClearEditorFrames()
+    for _, frame in ipairs(_editorFrames) do
+        frame:Hide()
+        frame:SetParent(nil)
+    end
+    wipe(_editorFrames)
+end
+
+local function TrackFrame(frame)
+    _editorFrames[#_editorFrames + 1] = frame
+    return frame
+end
+
 local _hintText = nil  -- reusable hint FontString
 
 function RuleBuilder:ClearRightPanel()
@@ -857,19 +874,6 @@ end
 ------------------------------------------------------------------------
 -- Right Panel: Rule Editor with Condition Builder
 ------------------------------------------------------------------------
-
-local function ClearEditorFrames()
-    for _, frame in ipairs(_editorFrames) do
-        frame:Hide()
-        frame:SetParent(nil)
-    end
-    wipe(_editorFrames)
-end
-
-local function TrackFrame(frame)
-    _editorFrames[#_editorFrames + 1] = frame
-    return frame
-end
 
 ------------------------------------------------------------------------
 -- Condition Node Rendering
