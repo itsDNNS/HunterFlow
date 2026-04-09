@@ -690,13 +690,15 @@ local function RenderAoeHint(spellID)
     aoeHintIcon:ClearAllPoints()
     local aoePos = TrueShot.GetOpt("aoeHintPosition") or "BELOW"
     if aoePos == "LEFT" then
-        -- Always position to the left of icon 1
-        aoeHintIcon:SetPoint("RIGHT", icons[1], "LEFT", -spacing, 0)
-    elseif orient == "DOWN" then
-        aoeHintIcon:SetPoint("RIGHT", icons[1], "LEFT", -spacing, 0)
-    elseif orient == "UP" then
-        aoeHintIcon:SetPoint("LEFT", icons[1], "RIGHT", spacing, 0)
+        -- Position to the left of the primary icon, offset past queue icons if RIGHT orientation
+        if orient == "RIGHT" then
+            -- Queue grows right; place left of container to avoid overlap with icon 2
+            aoeHintIcon:SetPoint("RIGHT", container, "LEFT", -spacing, 0)
+        else
+            aoeHintIcon:SetPoint("RIGHT", icons[1], "LEFT", -spacing, 0)
+        end
     else
+        -- BELOW: always below icon 1, regardless of orientation
         aoeHintIcon:SetPoint("TOP", icons[1], "BOTTOM", 0, -spacing)
     end
 
