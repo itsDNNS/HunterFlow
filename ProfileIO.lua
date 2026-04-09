@@ -1182,3 +1182,384 @@ function ProfileIO:ShowImport()
         end
     end)
 end
+
+------------------------------------------------------------------------
+-- Profile Browser: hierarchical Class > Spec > Hero Talent tree
+------------------------------------------------------------------------
+
+local BROWSER_SPEC_INFO = {
+    [253]  = { class = "Hunter",       spec = "Beast Mastery" },
+    [254]  = { class = "Hunter",       spec = "Marksmanship" },
+    [255]  = { class = "Hunter",       spec = "Survival" },
+    [577]  = { class = "Demon Hunter", spec = "Havoc" },
+    [1480] = { class = "Demon Hunter", spec = "Devourer" },
+    [102]  = { class = "Druid",        spec = "Balance" },
+    [103]  = { class = "Druid",        spec = "Feral" },
+    [62]   = { class = "Mage",         spec = "Arcane" },
+    [63]   = { class = "Mage",         spec = "Fire" },
+    [64]   = { class = "Mage",         spec = "Frost" },
+}
+
+local BROWSER_CLASS_ORDER = { "Hunter", "Demon Hunter", "Druid", "Mage" }
+
+local BROWSER_CLASS_COLORS = {
+    ["Hunter"]       = "abd473",
+    ["Demon Hunter"] = "a330c9",
+    ["Druid"]        = "ff7c0a",
+    ["Mage"]         = "3fc7eb",
+}
+
+local BROWSER_WIDTH = 520
+local BROWSER_HEIGHT = 500
+local ROW_HEIGHT = 22
+local MAX_ROWS = 60
+
+local _browserFrame = nil
+
+-- Extract hero talent name from profile id (e.g. "Hunter.BM.DarkRanger" -> "Dark Ranger")
+local function HeroTalentFromId(profileId)
+    local hero = profileId:match("^[^.]+%.[^.]+%.(.+)$")
+    if not hero then return nil end
+    -- CamelCase to spaced: "DarkRanger" -> "Dark Ranger"
+    return hero:gsub("(%u)", " %1"):gsub("^ ", "")
+end
+
+-- Build hierarchical tree: { class -> { spec -> { heroTalent -> {profiles} } } }
+local function BuildProfileTree()
+    local tree = {}
+    for specID, profiles in pairs(TrueShot.Profiles or {}) do
+        local info = BROWSER_SPEC_INFO[specID]
+        if info then
+            if not tree[info.class] then tree[info.class] = {} end
+            if not tree[info.class][info.spec] then tree[info.class][info.spec] = {} end
+            for _, profile in ipairs(profiles) do
+                local hero = HeroTalentFromId(profile.id) or profile.displayName or "Unknown"
+                if not tree[info.class][info.spec][hero] then
+                    tree[info.class][info.spec][hero] = {}
+                end
+                table.insert(tree[info.class][info.spec][hero], profile)
+            end
+        end
+    end
+    return tree
+end
+
+-- Sorted keys for deterministic display
+local function SortedKeys(tbl)
+    local keys = {}
+    for k in pairs(tbl) do keys[#keys + 1] = k end
+    table.sort(keys)
+    return keys
+end
+
+local function CreateBrowserFrame()
+    local f = CreateFrame("Frame", "TrueShotProfileBrowser", UIParent, "BackdropTemplate")
+    f:SetSize(BROWSER_WIDTH, BROWSER_HEIGHT)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:SetClampedToScreen(true)
+    f:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 14,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    f:SetBackdropColor(0.08, 0.08, 0.12, 0.95)
+    f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+    -- Title bar
+    local titleBar = CreateFrame("Frame", nil, f)
+    titleBar:SetHeight(28)
+    titleBar:SetPoint("TOPLEFT", f, "TOPLEFT", 4, -4)
+    titleBar:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
+    titleBar:EnableMouse(true)
+    titleBar:RegisterForDrag("LeftButton")
+    titleBar:SetScript("OnDragStart", function() f:StartMoving() end)
+    titleBar:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+
+    local title = titleBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    title:SetPoint("LEFT", titleBar, "LEFT", 8, 0)
+    title:SetText("|cffabd473TrueShot|r Profile Browser")
+
+    local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- Divider
+    local divider = f:CreateTexture(nil, "ARTWORK")
+    divider:SetHeight(1)
+    divider:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -34)
+    divider:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -34)
+    divider:SetColorTexture(0.3, 0.3, 0.3, 1)
+
+    -- ScrollFrame
+    local scrollFrame = CreateFrame("ScrollFrame", "TrueShotBrowserScroll", f, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -38)
+    scrollFrame:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -30, 10)
+
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetWidth(BROWSER_WIDTH - 44)
+    scrollChild:SetHeight(1)
+    scrollFrame:SetScrollChild(scrollChild)
+    f._scrollChild = scrollChild
+
+    -- Row pool
+    local rowPool = {}
+    for i = 1, MAX_ROWS do
+        local row = CreateFrame("Button", nil, scrollChild)
+        row:SetSize(BROWSER_WIDTH - 50, ROW_HEIGHT)
+        row:Hide()
+
+        row._text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        row._text:SetPoint("LEFT", row, "LEFT", 0, 0)
+        row._text:SetPoint("RIGHT", row, "RIGHT", -130, 0)
+        row._text:SetJustifyH("LEFT")
+        row._text:SetWordWrap(false)
+
+        -- Action buttons (hidden by default, shown on profile rows)
+        local viewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        viewBtn:SetSize(50, 18)
+        viewBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        viewBtn:SetText("View")
+        viewBtn:Hide()
+        row._viewBtn = viewBtn
+
+        local exportBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        exportBtn:SetSize(55, 18)
+        exportBtn:SetPoint("RIGHT", viewBtn, "LEFT", -4, 0)
+        exportBtn:SetText("Export")
+        exportBtn:Hide()
+        row._exportBtn = exportBtn
+
+        -- Highlight on hover
+        local highlight = row:CreateTexture(nil, "HIGHLIGHT")
+        highlight:SetAllPoints()
+        highlight:SetColorTexture(1, 1, 1, 0.05)
+
+        rowPool[i] = row
+    end
+    f._rowPool = rowPool
+
+    f:Hide()
+    return f
+end
+
+-- Collapsed state tracking per section key
+local _collapsed = {}
+
+local function ToggleCollapse(key)
+    _collapsed[key] = not _collapsed[key]
+end
+
+local function RefreshBrowser()
+    if not _browserFrame then return end
+    local scrollChild = _browserFrame._scrollChild
+    local rowPool = _browserFrame._rowPool
+    local tree = BuildProfileTree()
+
+    -- Hide all rows
+    for _, row in ipairs(rowPool) do
+        row:Hide()
+        row._viewBtn:Hide()
+        row._exportBtn:Hide()
+        row:SetScript("OnClick", nil)
+    end
+
+    -- Determine current character's class and spec
+    local currentSpecID = nil
+    if GetSpecialization and GetSpecializationInfo then
+        local specIndex = GetSpecialization()
+        if specIndex then currentSpecID = GetSpecializationInfo(specIndex) end
+    end
+
+    local activeProfile = TrueShot.Engine and TrueShot.Engine.activeProfile
+    local activeBaseId = activeProfile and (activeProfile._baseProfile or activeProfile).id
+
+    local rowIndex = 0
+    local lastRow = nil
+
+    for _, className in ipairs(BROWSER_CLASS_ORDER) do
+        local classData = tree[className]
+        if classData then
+            local color = BROWSER_CLASS_COLORS[className] or "ffffff"
+            local classKey = "class:" .. className
+            local classCollapsed = _collapsed[classKey]
+
+            -- Class header row
+            rowIndex = rowIndex + 1
+            if rowIndex > MAX_ROWS then break end
+            local classRow = rowPool[rowIndex]
+            classRow:ClearAllPoints()
+            if lastRow then
+                classRow:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -2)
+            else
+                classRow:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
+            end
+            local classArrow = classCollapsed and "|cffaaaaaa>|r " or "|cffaaaaaav|r "
+            classRow._text:SetText(classArrow .. "|cff" .. color .. className .. "|r")
+            classRow._text:SetFontObject(GameFontNormal)
+            classRow:SetScript("OnClick", function()
+                ToggleCollapse(classKey)
+                RefreshBrowser()
+            end)
+            classRow:Show()
+            lastRow = classRow
+
+            if not classCollapsed then
+                local specs = SortedKeys(classData)
+                for _, specName in ipairs(specs) do
+                    local specData = classData[specName]
+                    local specKey = "spec:" .. className .. "." .. specName
+                    local specCollapsed = _collapsed[specKey]
+
+                    -- Spec header row
+                    rowIndex = rowIndex + 1
+                    if rowIndex > MAX_ROWS then break end
+                    local specRow = rowPool[rowIndex]
+                    specRow:ClearAllPoints()
+                    specRow:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 16, -1)
+                    local specArrow = specCollapsed and "|cffaaaaaa>|r " or "|cffaaaaaav|r "
+                    specRow._text:SetText(specArrow .. "|cffdddddd" .. specName .. "|r")
+                    specRow._text:SetFontObject(GameFontHighlight)
+                    specRow:SetScript("OnClick", function()
+                        ToggleCollapse(specKey)
+                        RefreshBrowser()
+                    end)
+                    specRow:Show()
+                    lastRow = specRow
+
+                    if not specCollapsed then
+                        local heroes = SortedKeys(specData)
+                        for _, heroName in ipairs(heroes) do
+                            local profiles = specData[heroName]
+                            for _, profile in ipairs(profiles) do
+                                rowIndex = rowIndex + 1
+                                if rowIndex > MAX_ROWS then break end
+                                local profileRow = rowPool[rowIndex]
+                                profileRow:ClearAllPoints()
+                                profileRow:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 16, -1)
+
+                                local name = profile.displayName or heroName
+                                local isActive = (profile.id == activeBaseId)
+                                local hasCustom = CustomProfile.HasCustomData(profile.id)
+                                local suffix = ""
+                                if isActive and hasCustom then
+                                    suffix = "  |cff00ff00(active, customized)|r"
+                                elseif isActive then
+                                    suffix = "  |cff00ff00(active)|r"
+                                elseif hasCustom then
+                                    suffix = "  |cffaaaaaa(customized)|r"
+                                end
+
+                                local libCount = CustomProfile.GetLibraryCount(profile.id)
+                                if libCount > 1 then
+                                    suffix = suffix .. "  |cff888888[" .. libCount .. " variants]|r"
+                                end
+
+                                profileRow._text:SetText("|cffffffff" .. name .. "|r" .. suffix)
+                                profileRow._text:SetFontObject(isActive and GameFontGreen or GameFontHighlightSmall)
+
+                                -- View button: opens Rule Builder for this profile
+                                profileRow._viewBtn:Show()
+                                profileRow._viewBtn:SetScript("OnClick", function()
+                                    if profile.specID == currentSpecID then
+                                        -- Same spec: activate and open Rule Builder
+                                        TrueShot.Engine:ActivateProfile(profile.specID)
+                                        if TrueShot.RuleBuilder and TrueShot.RuleBuilder.Open then
+                                            TrueShot.RuleBuilder:Open()
+                                        end
+                                    else
+                                        -- Different spec: open read-only Rule Builder view
+                                        if TrueShot.RuleBuilder and TrueShot.RuleBuilder.OpenReadOnly then
+                                            TrueShot.RuleBuilder:OpenReadOnly(profile)
+                                        else
+                                            print("|cffffff00[TS]|r Cannot view profiles from other specs in Rule Builder.")
+                                        end
+                                    end
+                                    _browserFrame:Hide()
+                                end)
+
+                                -- Export button: show export string if customized
+                                if hasCustom then
+                                    profileRow._exportBtn:Show()
+                                    profileRow._exportBtn:SetScript("OnClick", function()
+                                        ProfileIO:ShowExportFor(profile)
+                                        _browserFrame:Hide()
+                                    end)
+                                end
+
+                                profileRow:SetScript("OnClick", nil) -- no toggle on leaf rows
+                                profileRow:Show()
+                                lastRow = profileRow
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Update scroll child height
+    C_Timer.After(0, function()
+        if scrollChild:GetTop() and lastRow and lastRow:GetBottom() then
+            scrollChild:SetHeight(scrollChild:GetTop() - lastRow:GetBottom() + 20)
+        end
+    end)
+end
+
+-- Export a specific profile (not just the active one)
+function ProfileIO:ShowExportFor(profile)
+    local profileId = profile.id
+    local customData = CustomProfile.GetCustomData(profileId)
+    if not customData then
+        print("|cffff0000[TS]|r No custom data for " .. (profile.displayName or profileId) .. ".")
+        return
+    end
+
+    local payload = {
+        schemaVersion = customData.schemaVersion or 1,
+        profileId = profileId,
+        specID = profile.specID,
+        markerSpell = profile.markerSpell,
+        displayName = profile.displayName or profileId,
+        rules = customData.rules,
+        stateVarDefs = customData.stateVarDefs,
+        triggers = customData.triggers,
+        rotationalSpells = customData.rotationalSpells,
+    }
+
+    local exportString = ProfileIO.Encode(payload)
+
+    if not _exportFrame then
+        _exportFrame = CreateExportFrame()
+    end
+
+    _exportFrame._subtitle:SetText("|cffaaaaaa" .. (profile.displayName or profileId) .. "|r")
+    _exportFrame._editBox:SetText(exportString)
+    _exportFrame:Show()
+
+    C_Timer.After(0, function()
+        if _exportFrame:IsShown() then
+            _exportFrame._editBox:SetFocus()
+            _exportFrame._editBox:HighlightText()
+        end
+    end)
+end
+
+function ProfileIO:ShowBrowser()
+    if not _browserFrame then
+        _browserFrame = CreateBrowserFrame()
+    end
+    RefreshBrowser()
+    _browserFrame:Show()
+end
+
+function ProfileIO:ToggleBrowser()
+    if _browserFrame and _browserFrame:IsShown() then
+        _browserFrame:Hide()
+    else
+        self:ShowBrowser()
+    end
+end

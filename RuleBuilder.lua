@@ -333,6 +333,17 @@ local function CreateMainFrame()
     end)
     f._importBtn = importBtn
 
+    local browseBtn = CreateFrame("Button", nil, bottomBar, "UIPanelButtonTemplate")
+    browseBtn:SetSize(80, 22)
+    browseBtn:SetPoint("RIGHT", importBtn, "LEFT", -6, 0)
+    browseBtn:SetText("Browse All")
+    browseBtn:SetScript("OnClick", function()
+        if TrueShot.ProfileIO and TrueShot.ProfileIO.ShowBrowser then
+            TrueShot.ProfileIO:ShowBrowser()
+        end
+    end)
+    f._browseBtn = browseBtn
+
     f:Hide()
     return f
 end
@@ -710,6 +721,43 @@ function RuleBuilder:Open()
         _mainFrame._leftPanel:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -38)
         _mainFrame._leftPanel:SetPoint("BOTTOMLEFT", _mainFrame, "BOTTOMLEFT", 8, 44)
     end
+
+    self:RefreshRuleList()
+    self:UpdateButtonStates()
+    self:ClearRightPanel()
+    _mainFrame:Show()
+end
+
+-- Read-only view for cross-spec profiles from the Profile Browser
+function RuleBuilder:OpenReadOnly(profile)
+    if not _mainFrame then
+        _mainFrame = CreateMainFrame()
+    end
+
+    local profileId = profile.id
+
+    _mainFrame._profileLabel:SetText("|cffaaaaaa" .. (profile.displayName or profileId) .. " (read-only)|r")
+
+    -- Load built-in rules as read-only
+    _editingData = {
+        rules = profile.rules or {},
+        stateVarDefs = {},
+        triggers = {},
+        rotationalSpells = profile.rotationalSpells or {},
+    }
+    _isCustomized = false
+
+    _selectedIndex = nil
+    _selectedVarIndex = nil
+
+    -- Hide library selector for read-only
+    _mainFrame._libSelector:Hide()
+    _mainFrame._divider:ClearAllPoints()
+    _mainFrame._divider:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -34)
+    _mainFrame._divider:SetPoint("TOPRIGHT", _mainFrame, "TOPRIGHT", -8, -34)
+    _mainFrame._leftPanel:ClearAllPoints()
+    _mainFrame._leftPanel:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -38)
+    _mainFrame._leftPanel:SetPoint("BOTTOMLEFT", _mainFrame, "BOTTOMLEFT", 8, 44)
 
     self:RefreshRuleList()
     self:UpdateButtonStates()

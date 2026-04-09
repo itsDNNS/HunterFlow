@@ -354,6 +354,13 @@ SlashCmdList["TRUESHOT"] = function(msg)
             print("|cffff0000[TS]|r Rule Builder not loaded.")
         end
 
+    elseif msg == "profiles" or msg == "browse" then
+        if TrueShot.ProfileIO and TrueShot.ProfileIO.ToggleBrowser then
+            TrueShot.ProfileIO:ToggleBrowser()
+        else
+            print("|cffff0000[TS]|r ProfileIO not loaded.")
+        end
+
     elseif msg == "help" then
         print("|cff00ff00[TrueShot]|r Commands:")
         print("  /ts lock    - Lock frame (click-through)")
@@ -365,6 +372,7 @@ SlashCmdList["TRUESHOT"] = function(msg)
         print("  /ts debug   - Print queue and profile state")
         print("  /ts score   - Show recent alignment scores")
         print("  /ts rules   - Open the Visual Rule Builder")
+        print("  /ts profiles - Browse all profiles (Class > Spec > Hero Talent)")
         print("  /ts export  - Export custom profile as shareable string")
         print("  /ts import  - Import a profile from a shared string")
         print("  /ts diagnostics on|off - Enable or disable probe diagnostics")
