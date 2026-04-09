@@ -336,6 +336,61 @@ local function CreateFeaturesPanel()
         scorecardDesc, "showHeartbeat"
     )
 
+    -- Positioning section
+    local posHeader = CreateSectionHeader(panel, "Element Positioning", heartbeatDesc, -20)
+
+    local reasonPosLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    reasonPosLabel:SetPoint("TOPLEFT", posHeader, "BOTTOMLEFT", 0, -10)
+    reasonPosLabel:SetText("Reason text position")
+
+    local reasonPosDropdown = CreateFrame("Frame", "TrueShotReasonPosDD", panel, "UIDropDownMenuTemplate")
+    reasonPosDropdown:SetPoint("TOPLEFT", reasonPosLabel, "BOTTOMLEFT", -16, -2)
+    UIDropDownMenu_SetWidth(reasonPosDropdown, 100)
+
+    local reasonPosOptions = { "BELOW", "ABOVE" }
+    UIDropDownMenu_Initialize(reasonPosDropdown, function()
+        for _, opt in ipairs(reasonPosOptions) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt
+            info.checked = (TrueShot.GetOpt("reasonPosition") == opt)
+            info.func = function()
+                TrueShot.SetOpt("reasonPosition", opt)
+                UIDropDownMenu_SetText(reasonPosDropdown, opt)
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+
+    local reasonPosDesc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    reasonPosDesc:SetPoint("TOPLEFT", reasonPosDropdown, "BOTTOMLEFT", 16, -2)
+    reasonPosDesc:SetText("   Show the recommendation reason (e.g. Withering Fire) above or below the icon.")
+
+    local aoeHintPosLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    aoeHintPosLabel:SetPoint("TOPLEFT", reasonPosDesc, "BOTTOMLEFT", 0, -10)
+    aoeHintPosLabel:SetText("AoE hint position")
+
+    local aoeHintPosDropdown = CreateFrame("Frame", "TrueShotAoeHintPosDD", panel, "UIDropDownMenuTemplate")
+    aoeHintPosDropdown:SetPoint("TOPLEFT", aoeHintPosLabel, "BOTTOMLEFT", -16, -2)
+    UIDropDownMenu_SetWidth(aoeHintPosDropdown, 100)
+
+    local aoeHintPosOptions = { "BELOW", "LEFT" }
+    UIDropDownMenu_Initialize(aoeHintPosDropdown, function()
+        for _, opt in ipairs(aoeHintPosOptions) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt
+            info.checked = (TrueShot.GetOpt("aoeHintPosition") == opt)
+            info.func = function()
+                TrueShot.SetOpt("aoeHintPosition", opt)
+                UIDropDownMenu_SetText(aoeHintPosDropdown, opt)
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+
+    local aoeHintPosDesc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    aoeHintPosDesc:SetPoint("TOPLEFT", aoeHintPosDropdown, "BOTTOMLEFT", 16, -2)
+    aoeHintPosDesc:SetText("   Show the AoE hint icon (e.g. Wild Thrash) below the main icon or to its left.")
+
     panel:SetScript("OnShow", function()
         castCheck.sync()
         cooldownCheck.sync()
@@ -346,6 +401,8 @@ local function CreateFeaturesPanel()
         glowCheck.sync()
         scorecardCheck.sync()
         heartbeatCheck.sync()
+        UIDropDownMenu_SetText(reasonPosDropdown, TrueShot.GetOpt("reasonPosition") or "BELOW")
+        UIDropDownMenu_SetText(aoeHintPosDropdown, TrueShot.GetOpt("aoeHintPosition") or "BELOW")
     end)
 
     return panel

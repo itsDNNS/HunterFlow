@@ -22,6 +22,8 @@
   - Export button for profiles with custom data
   - Active/customized/variant indicators per profile
   - Accessible from Rule Builder ("Browse All" button) or slash command
+- **Reason text position** (#75): Option to show recommendation reason above or below the icon
+- **AoE hint position** (#76): Option to show AoE hint icon to the left of the main icon or below it
 
 ## v0.19.0 - 2026-04-09
 
