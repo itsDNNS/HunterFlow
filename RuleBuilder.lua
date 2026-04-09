@@ -568,7 +568,7 @@ function RuleBuilder:Open()
     -- Load existing custom data or show built-in rules read-only
     local customData = CustomProfile.GetCustomData(profileId)
     if customData then
-        _editingData = customData
+        _editingData = DeepCopy(customData)  -- work on a copy, not the live SavedVariables
         _isCustomized = true
     else
         -- Read-only view of built-in rules
@@ -645,6 +645,14 @@ function RuleBuilder:OnApply()
     local Engine = TrueShot.Engine
     local profile = Engine and Engine.activeProfile
     if not profile then return end
+
+    -- Validate rules before saving
+    for i, rule in ipairs(_editingData.rules or {}) do
+        if not rule.spellID then
+            print("|cffff0000[TS]|r Rule " .. i .. " has no spell selected. Fix before applying.")
+            return
+        end
+    end
 
     local baseProfile = profile._baseProfile or profile
     CustomProfile.SaveCustomData(baseProfile.id, _editingData)
@@ -1519,21 +1527,41 @@ function RuleBuilder:ShowStateVarEditor(varIndex)
     nameEdit:SetAutoFocus(false)
     nameEdit:SetText(def.name or "")
 
+    -- Check if this var already exists in saved data (renaming would break wiring)
+    local baseProfile = (TrueShot.Engine and TrueShot.Engine.activeProfile)
+    local baseId = baseProfile and (baseProfile._baseProfile or baseProfile).id
+    local savedData = baseId and CustomProfile.GetCustomData(baseId)
+    local isSavedVar = false
+    if savedData and savedData.stateVarDefs then
+        for _, savedDef in ipairs(savedData.stateVarDefs) do
+            if savedDef.name == def.name then
+                isSavedVar = true
+                break
+            end
+        end
+    end
+
     local nameHint = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     nameHint:SetPoint("TOPLEFT", nameEdit, "BOTTOMLEFT", 0, -2)
-    nameHint:SetText("|cff888888Alphanumeric + underscore, used as condition ID|r")
 
-    local function ApplyName()
-        local raw = nameEdit:GetText() or ""
-        -- Strip invalid chars: only a-z A-Z 0-9 _
-        local clean = raw:gsub("[^%w_]", "")
-        if clean == "" then clean = "var" .. varIndex end
-        def.name = clean
-        nameEdit:SetText(clean)
-        RuleBuilder:RefreshRuleList()
+    if isSavedVar then
+        nameEdit:Disable()
+        nameEdit:SetTextColor(0.5, 0.5, 0.5)
+        nameHint:SetText("|cff888888Locked after creation (referenced by triggers/conditions)|r")
+    else
+        nameHint:SetText("|cff888888Alphanumeric + underscore, used as condition ID|r")
+        local function ApplyName()
+            local raw = nameEdit:GetText() or ""
+            -- Strip invalid chars: only a-z A-Z 0-9 _
+            local clean = raw:gsub("[^%w_]", "")
+            if clean == "" then clean = "var" .. varIndex end
+            def.name = clean
+            nameEdit:SetText(clean)
+            RuleBuilder:RefreshRuleList()
+        end
+        nameEdit:SetScript("OnEnterPressed", function(self) ApplyName(); self:ClearFocus() end)
+        nameEdit:SetScript("OnEditFocusLost", ApplyName)
     end
-    nameEdit:SetScript("OnEnterPressed", function(self) ApplyName(); self:ClearFocus() end)
-    nameEdit:SetScript("OnEditFocusLost", ApplyName)
 
     ----------------------------------------------------------------
     -- Label (display name)

@@ -604,6 +604,7 @@ local function CreateProfilesPanel()
 
                     local p = entry.profile
                     local isActive = (p == activeProfile)
+                        or (activeProfile and activeProfile._baseProfile == p)
                     local name = p.displayName or p.id or "Unknown"
 
                     local row = rowPool[rowIndex]

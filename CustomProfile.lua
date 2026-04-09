@@ -36,7 +36,8 @@ end
 function CustomProfile.GetConditionSchemasForProfile(profileId)
     local result = {}
     for id, schema in pairs(_conditionSchemas) do
-        if schema.source == "_engine" or schema.source == profileId or schema.source == "_custom" then
+        if schema.source == "_engine" or schema.source == profileId
+            or schema.source == profileId .. "_custom" then
             result[#result + 1] = schema
         end
     end
@@ -197,7 +198,10 @@ function CustomProfile.Compile(baseProfile, customData)
 
     local customDefs = customData.stateVarDefs or {}
     local customTriggers = customData.triggers or {}
-    wrapper.state = BuildStateFromDefs(customDefs)
+    -- Only initialize state on first creation; preserve runtime combat state
+    if not wrapper.state then
+        wrapper.state = BuildStateFromDefs(customDefs)
+    end
 
     wrapper._baseProfile = baseProfile
     wrapper._customData = customData
@@ -362,11 +366,14 @@ function CustomProfile.WrapActivation()
             end
         end
 
+        -- Re-register custom conditions on every activation (survives reload)
+        CustomProfile.RegisterCustomConditions(baseProfile.id, customData.stateVarDefs)
+
+        local wasCached = _wrapperCache[baseProfile.id] ~= nil
         local compiled = CustomProfile.Compile(baseProfile, customData)
 
-        local prev = self.activeProfile
         self.activeProfile = compiled
-        if compiled ~= prev then
+        if not wasCached then
             compiled:ResetState()
         end
         self:RebuildBlacklist()
@@ -385,7 +392,7 @@ function CustomProfile.RegisterCustomConditions(profileId, stateVarDefs)
         }
     end
     if #schemas > 0 then
-        CustomProfile.RegisterConditionSchema("_custom", schemas)
+        CustomProfile.RegisterConditionSchema(profileId .. "_custom", schemas)
     end
 end
 
