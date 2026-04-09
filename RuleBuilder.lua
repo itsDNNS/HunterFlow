@@ -65,6 +65,7 @@ local _selectedVarIndex = nil  -- index into stateVarDefs, or nil
 local _editingData = nil  -- the custom data being edited
 local _isCustomized = false
 local _isReadOnly = false
+local _viewedProfileId = nil  -- profile ID for read-only views
 local _editorFrames = {}  -- tracked frames for editor cleanup
 local RenderConditionTree  -- forward declaration for recursive rendering
 
@@ -137,6 +138,9 @@ local function GetRotationalSpellList()
 end
 
 local function GetProfileId()
+    if _isReadOnly and _viewedProfileId then
+        return _viewedProfileId
+    end
     local Engine = TrueShot.Engine
     local profile = Engine and Engine.activeProfile
     if not profile then return nil end
@@ -560,7 +564,7 @@ function RuleBuilder:RefreshRuleList()
                 row._selected:Hide()
             end
 
-            if _isCustomized then
+            if _isCustomized and not _isReadOnly then
                 row._upBtn:SetShown(i > 1)
                 row._downBtn:SetShown(i < #rules)
                 row._delBtn:Show()
@@ -610,7 +614,7 @@ function RuleBuilder:RefreshRuleList()
                 row._selected:Hide()
             end
 
-            if _isCustomized then
+            if _isCustomized and not _isReadOnly then
                 row._delBtn:Show()
             else
                 row._delBtn:Hide()
@@ -664,6 +668,7 @@ function RuleBuilder:Open()
     -- Update title
     _mainFrame._profileLabel:SetText("|cffaaaaaa" .. (baseProfile.displayName or profileId) .. "|r")
     _isReadOnly = false
+    _viewedProfileId = nil
 
     -- Load existing custom data or show built-in rules read-only
     local customData = CustomProfile.GetCustomData(profileId)
@@ -755,6 +760,12 @@ function RuleBuilder:OpenReadOnly(profile)
         _isCustomized = false
     end
     _isReadOnly = true
+    _viewedProfileId = profileId
+
+    -- Register custom state var conditions for the viewed profile
+    if _editingData.stateVarDefs then
+        CustomProfile.RegisterCustomConditions(profileId, _editingData.stateVarDefs)
+    end
 
     _selectedIndex = nil
     _selectedVarIndex = nil
@@ -851,6 +862,7 @@ end
 ------------------------------------------------------------------------
 
 function RuleBuilder:OnCustomize()
+    if _isReadOnly then return end
     local Engine = TrueShot.Engine
     local profile = Engine and Engine.activeProfile
     if not profile then return end
@@ -868,6 +880,7 @@ function RuleBuilder:OnCustomize()
 end
 
 function RuleBuilder:OnApply()
+    if _isReadOnly then return end
     if not _editingData or not _isCustomized then return end
 
     local Engine = TrueShot.Engine
@@ -913,6 +926,7 @@ function RuleBuilder:OnApply()
 end
 
 function RuleBuilder:OnReset()
+    if _isReadOnly then return end
     local Engine = TrueShot.Engine
     local profile = Engine and Engine.activeProfile
     if not profile then return end
@@ -934,6 +948,7 @@ function RuleBuilder:OnReset()
 end
 
 function RuleBuilder:OnDeleteLibraryEntry()
+    if _isReadOnly then return end
     local Engine = TrueShot.Engine
     local profile = Engine and Engine.activeProfile
     if not profile then return end
@@ -1011,6 +1026,7 @@ function RuleBuilder:MoveRule(index, direction)
 end
 
 function RuleBuilder:DeleteRule(index)
+    if _isReadOnly then return end
     if not _editingData or not _isCustomized then return end
     table.remove(_editingData.rules, index)
     if _selectedIndex == index then
@@ -1023,6 +1039,7 @@ function RuleBuilder:DeleteRule(index)
 end
 
 function RuleBuilder:OnAddRule()
+    if _isReadOnly then return end
     if not _editingData or not _isCustomized then return end
     local newRule = {
         type = "PIN",
@@ -1037,6 +1054,7 @@ function RuleBuilder:OnAddRule()
 end
 
 function RuleBuilder:OnAddStateVar()
+    if _isReadOnly then return end
     if not _editingData or not _isCustomized then return end
     local newVar = {
         name    = "var" .. (#_editingData.stateVarDefs + 1),
