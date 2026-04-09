@@ -764,3 +764,331 @@ function ProfileIO.Normalize(data)
     }
     return normalized
 end
+
+------------------------------------------------------------------------
+-- Export Frame
+------------------------------------------------------------------------
+
+local _exportFrame = nil
+
+local function CreateExportFrame()
+    local f = CreateFrame("Frame", "TrueShotExportFrame", UIParent, "BackdropTemplate")
+    f:SetSize(500, 280)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:SetClampedToScreen(true)
+    f:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 14,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    f:SetBackdropColor(0.08, 0.08, 0.12, 0.95)
+    f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+    -- Title bar
+    local titleBar = CreateFrame("Frame", nil, f)
+    titleBar:SetHeight(24)
+    titleBar:SetPoint("TOPLEFT", f, "TOPLEFT", 4, -4)
+    titleBar:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
+    titleBar:EnableMouse(true)
+    titleBar:RegisterForDrag("LeftButton")
+    titleBar:SetScript("OnDragStart", function() f:StartMoving() end)
+    titleBar:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+
+    local title = titleBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    title:SetPoint("LEFT", titleBar, "LEFT", 8, 0)
+    title:SetText("|cffabd473Export Profile|r")
+
+    local subtitle = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 8, -4)
+    f._subtitle = subtitle
+
+    -- Close button
+    local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- Scroll frame for editbox
+    local scroll = CreateFrame("ScrollFrame", "TrueShotExportScroll", f, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -8)
+    scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -30, 40)
+
+    local editBox = CreateFrame("EditBox", "TrueShotExportEditBox", scroll)
+    editBox:SetMultiLine(true)
+    editBox:SetAutoFocus(false)
+    editBox:SetFontObject(GameFontHighlightSmall)
+    editBox:SetWidth(scroll:GetWidth() or 440)
+    editBox:SetMaxLetters(0)
+    scroll:SetScrollChild(editBox)
+    f._editBox = editBox
+
+    -- Close button at bottom
+    local bottomClose = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    bottomClose:SetSize(80, 22)
+    bottomClose:SetPoint("BOTTOM", f, "BOTTOM", 0, 10)
+    bottomClose:SetText("Close")
+    bottomClose:SetScript("OnClick", function() f:Hide() end)
+
+    f:Hide()
+    return f
+end
+
+function ProfileIO:ShowExport()
+    local Engine = TrueShot.Engine
+    local profile = Engine and Engine.activeProfile
+    if not profile then
+        print("|cffff0000[TS]|r No active profile.")
+        return
+    end
+
+    local baseProfile = profile._baseProfile or profile
+    local profileId = baseProfile.id
+    local customData = CustomProfile.GetCustomData(profileId)
+
+    if not customData then
+        print("|cffff0000[TS]|r No custom profile to export. Customize first via /ts rules.")
+        return
+    end
+
+    -- Build export payload
+    local payload = {
+        schemaVersion = customData.schemaVersion or SCHEMA_VERSION,
+        profileId = profileId,
+        specID = baseProfile.specID,
+        markerSpell = baseProfile.markerSpell,
+        displayName = baseProfile.displayName or profileId,
+        rules = customData.rules,
+        stateVarDefs = customData.stateVarDefs,
+        triggers = customData.triggers,
+        rotationalSpells = customData.rotationalSpells,
+    }
+
+    local exportString = ProfileIO.Encode(payload)
+
+    if not _exportFrame then
+        _exportFrame = CreateExportFrame()
+    end
+
+    _exportFrame._subtitle:SetText("|cffaaaaaa" .. (baseProfile.displayName or profileId) .. "|r")
+    _exportFrame._editBox:SetText(exportString)
+    _exportFrame:Show()
+
+    -- Delayed focus and highlight for copy UX
+    C_Timer.After(0, function()
+        if _exportFrame:IsShown() then
+            _exportFrame._editBox:SetFocus()
+            _exportFrame._editBox:HighlightText()
+        end
+    end)
+end
+
+------------------------------------------------------------------------
+-- Import Frame
+------------------------------------------------------------------------
+
+local _importFrame = nil
+
+local function CreateImportFrame()
+    local f = CreateFrame("Frame", "TrueShotImportFrame", UIParent, "BackdropTemplate")
+    f:SetSize(500, 420)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:SetClampedToScreen(true)
+    f:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 14,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    f:SetBackdropColor(0.08, 0.08, 0.12, 0.95)
+    f:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+    -- Title bar
+    local titleBar = CreateFrame("Frame", nil, f)
+    titleBar:SetHeight(24)
+    titleBar:SetPoint("TOPLEFT", f, "TOPLEFT", 4, -4)
+    titleBar:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
+    titleBar:EnableMouse(true)
+    titleBar:RegisterForDrag("LeftButton")
+    titleBar:SetScript("OnDragStart", function() f:StartMoving() end)
+    titleBar:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+
+    local title = titleBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    title:SetPoint("LEFT", titleBar, "LEFT", 8, 0)
+    title:SetText("|cffabd473Import Profile|r")
+
+    -- Close button
+    local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- Paste label
+    local pasteLabel = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    pasteLabel:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 8, -6)
+    pasteLabel:SetText("Paste import string below:")
+
+    -- Scroll frame for paste editbox
+    local scroll = CreateFrame("ScrollFrame", "TrueShotImportScroll", f, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", pasteLabel, "BOTTOMLEFT", 0, -4)
+    scroll:SetPoint("RIGHT", f, "RIGHT", -30, 0)
+    scroll:SetHeight(100)
+
+    local editBox = CreateFrame("EditBox", "TrueShotImportEditBox", scroll)
+    editBox:SetMultiLine(true)
+    editBox:SetAutoFocus(false)
+    editBox:SetFontObject(GameFontHighlightSmall)
+    editBox:SetWidth(scroll:GetWidth() or 440)
+    editBox:SetMaxLetters(0)
+    scroll:SetScrollChild(editBox)
+    f._editBox = editBox
+
+    -- Preview/Import button row
+    local previewBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    previewBtn:SetSize(80, 22)
+    previewBtn:SetPoint("TOPLEFT", scroll, "BOTTOMLEFT", 0, -6)
+    previewBtn:SetText("Preview")
+    f._previewBtn = previewBtn
+
+    local importBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    importBtn:SetSize(80, 22)
+    importBtn:SetPoint("LEFT", previewBtn, "RIGHT", 6, 0)
+    importBtn:SetText("Import")
+    importBtn:Disable()
+    f._importBtn = importBtn
+
+    local cancelBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    cancelBtn:SetSize(80, 22)
+    cancelBtn:SetPoint("LEFT", importBtn, "RIGHT", 6, 0)
+    cancelBtn:SetText("Cancel")
+    cancelBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- Preview area
+    local previewArea = CreateFrame("Frame", nil, f)
+    previewArea:SetPoint("TOPLEFT", previewBtn, "BOTTOMLEFT", 0, -8)
+    previewArea:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
+
+    local previewText = previewArea:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    previewText:SetPoint("TOPLEFT", previewArea, "TOPLEFT", 0, 0)
+    previewText:SetPoint("RIGHT", previewArea, "RIGHT", 0, 0)
+    previewText:SetJustifyH("LEFT")
+    previewText:SetJustifyV("TOP")
+    previewText:SetWordWrap(true)
+    f._previewText = previewText
+
+    -- Wire preview button
+    local _pendingData = nil
+    previewBtn:SetScript("OnClick", function()
+        local inputStr = editBox:GetText()
+        if not inputStr or inputStr == "" then
+            previewText:SetText("|cffff0000No input.|r")
+            importBtn:Disable()
+            return
+        end
+
+        local data, decodeErr = ProfileIO.Decode(inputStr)
+        if not data then
+            previewText:SetText("|cffff0000" .. (decodeErr or "Decode failed") .. "|r")
+            importBtn:Disable()
+            return
+        end
+
+        local valid, errors, warnings = ProfileIO.Validate(data)
+        local lines = {}
+
+        -- Profile info
+        lines[#lines + 1] = "|cffabd473Profile:|r " .. (data.displayName or data.profileId or "?")
+        lines[#lines + 1] = "|cffabd473Spec:|r " .. tostring(data.specID or "?")
+        lines[#lines + 1] = "|cffabd473Rules:|r " .. (#(data.rules or {}))
+        lines[#lines + 1] = "|cffabd473State Vars:|r " .. (#(data.stateVarDefs or {}))
+        lines[#lines + 1] = "|cffabd473Triggers:|r " .. (#(data.triggers or {}))
+        lines[#lines + 1] = ""
+
+        if valid then
+            lines[#lines + 1] = "|cff00ff00Validation passed.|r"
+        else
+            lines[#lines + 1] = "|cffff0000Validation failed:|r"
+            for _, err in ipairs(errors) do
+                lines[#lines + 1] = "  |cffff4444- " .. err .. "|r"
+            end
+        end
+
+        if #warnings > 0 then
+            lines[#lines + 1] = ""
+            lines[#lines + 1] = "|cffffff00Warnings:|r"
+            for _, w in ipairs(warnings) do
+                lines[#lines + 1] = "  |cffffff88- " .. w .. "|r"
+            end
+        end
+
+        previewText:SetText(table.concat(lines, "\n"))
+
+        if valid then
+            _pendingData = data
+            importBtn:Enable()
+        else
+            _pendingData = nil
+            importBtn:Disable()
+        end
+    end)
+
+    -- Wire import button
+    importBtn:SetScript("OnClick", function()
+        if not _pendingData then return end
+
+        local normalized, normErr = ProfileIO.Normalize(_pendingData)
+        if not normalized then
+            previewText:SetText("|cffff0000" .. (normErr or "Normalization failed") .. "|r")
+            return
+        end
+
+        local profileId = _pendingData.profileId
+        CustomProfile.SaveCustomData(profileId, normalized)
+        CustomProfile.InvalidateWrapper(profileId)
+        CustomProfile.RegisterCustomConditions(profileId, normalized.stateVarDefs)
+
+        -- Re-activate if on matching spec
+        local currentSpecID = nil
+        if GetSpecialization and GetSpecializationInfo then
+            local specIndex = GetSpecialization()
+            if specIndex then currentSpecID = GetSpecializationInfo(specIndex) end
+        end
+        if _pendingData.specID and currentSpecID == _pendingData.specID then
+            TrueShot.Engine:ActivateProfile(currentSpecID)
+        end
+
+        -- Refresh Rule Builder if open
+        if TrueShot.RuleBuilder and TrueShot.RuleBuilder.Open then
+            local rbFrame = TrueShotRuleBuilder
+            if rbFrame and rbFrame:IsShown() then
+                TrueShot.RuleBuilder:Open()
+            end
+        end
+
+        print("|cff00ff00[TS]|r Profile imported: " .. (_pendingData.displayName or profileId))
+        _pendingData = nil
+        f:Hide()
+    end)
+
+    f:Hide()
+    return f
+end
+
+function ProfileIO:ShowImport()
+    if not _importFrame then
+        _importFrame = CreateImportFrame()
+    end
+    _importFrame._editBox:SetText("")
+    _importFrame._previewText:SetText("")
+    _importFrame._importBtn:Disable()
+    _importFrame:Show()
+    C_Timer.After(0, function()
+        if _importFrame:IsShown() then
+            _importFrame._editBox:SetFocus()
+        end
+    end)
+end
