@@ -1382,12 +1382,14 @@ local function RefreshBrowser()
     local lastRow = nil
     local lastRowDepth = 0
 
+    local baseRowWidth = BROWSER_WIDTH - 50
+
     -- Place a row at the given depth, anchoring vertically below lastRow
     -- but with absolute X offset from scrollChild based on depth
     local function PlaceRow(row, depth, spacing)
         row:ClearAllPoints()
+        row:SetWidth(baseRowWidth - depth * INDENT)
         if lastRow then
-            -- Anchor below previous row, but compute X offset relative to scrollChild
             local xOffset = depth * INDENT
             local prevX = lastRowDepth * INDENT
             row:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", xOffset - prevX, spacing or -1)

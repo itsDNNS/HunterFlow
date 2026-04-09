@@ -827,6 +827,35 @@ end
 
 local _hintText = nil  -- reusable hint FontString
 
+-- Disable all interactive controls in tracked editor frames (read-only mode)
+local function DisableEditorControls()
+    for _, frame in ipairs(_editorFrames) do
+        -- Disable buttons
+        if frame.Disable and frame:IsObjectType("Button") then
+            frame:Disable()
+        end
+        -- Disable editboxes
+        if frame:IsObjectType("EditBox") then
+            frame:SetEnabled(false)
+        end
+        -- Recurse into children
+        for i = 1, frame:GetNumChildren() do
+            local child = select(i, frame:GetChildren())
+            if child.Disable and child:IsObjectType("Button") then
+                child:Disable()
+            end
+            if child.SetEnabled and child:IsObjectType("EditBox") then
+                child:SetEnabled(false)
+            end
+            -- Dropdowns: disable their button child
+            if child:GetName() and child:GetName():find("DropDown") then
+                local ddBtn = _G[child:GetName() .. "Button"]
+                if ddBtn and ddBtn.Disable then ddBtn:Disable() end
+            end
+        end
+    end
+end
+
 function RuleBuilder:ClearRightPanel()
     -- Clear all children of the right panel
     if not _rightPanel then return end
@@ -976,6 +1005,7 @@ function RuleBuilder:SelectStateVar(index)
 end
 
 function RuleBuilder:DeleteStateVar(index)
+    if _isReadOnly then return end
     if not _editingData or not _isCustomized then return end
     -- Capture varName before removing the def
     local varName = (_editingData.stateVarDefs[index] or {}).name
@@ -1009,6 +1039,7 @@ function RuleBuilder:DeleteStateVar(index)
 end
 
 function RuleBuilder:MoveRule(index, direction)
+    if _isReadOnly then return end
     if not _editingData or not _isCustomized then return end
     local rules = _editingData.rules
     local newIndex = index + direction
@@ -1758,6 +1789,8 @@ function RuleBuilder:ShowRuleEditor(index)
             scrollChild:SetHeight(math.max(top - bottom + 40, 200))
         end
     end)
+
+    if _isReadOnly then DisableEditorControls() end
 end
 
 ------------------------------------------------------------------------
@@ -2061,6 +2094,8 @@ function RuleBuilder:ShowStateVarEditor(varIndex)
             scrollChild:SetHeight(math.max(top - bottom + 30, 300))
         end
     end)
+
+    if _isReadOnly then DisableEditorControls() end
 end
 
 ------------------------------------------------------------------------
@@ -2071,7 +2106,7 @@ function RuleBuilder:ShowTriggerEditor(varIndex, trigIndex)
     self:ClearRightPanel()
     ClearEditorFrames()
 
-    if not _rightPanel or not _editingData or not _isCustomized then return end
+    if not _rightPanel or not _editingData or (not _isCustomized and not _isReadOnly) then return end
     local def = _editingData.stateVarDefs and _editingData.stateVarDefs[varIndex]
     local trig = _editingData.triggers and _editingData.triggers[trigIndex]
     if not def or not trig then return end
@@ -2365,4 +2400,6 @@ function RuleBuilder:ShowTriggerEditor(varIndex, trigIndex)
             scrollChild:SetHeight(math.max(top - bottom + 30, 300))
         end
     end)
+
+    if _isReadOnly then DisableEditorControls() end
 end
