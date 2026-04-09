@@ -119,7 +119,14 @@ function CustomProfile.SaveCustomData(profileId, data)
     local library = TrueShotDB.customProfiles[profileId]
     if library and library.profiles then
         local idx = library.activeIndex or 1
-        library.profiles[idx] = data
+        if idx < 1 then
+            -- activeIndex 0 means built-in was active; append as new entry
+            data.name = data.name or "Custom"
+            library.profiles[#library.profiles + 1] = data
+            library.activeIndex = #library.profiles
+        else
+            library.profiles[idx] = data
+        end
     else
         data.name = data.name or "Custom"
         TrueShotDB.customProfiles[profileId] = {
@@ -158,7 +165,7 @@ end
 function CustomProfile.SetActiveIndex(profileId, index)
     local library = CustomProfile.GetProfileLibrary(profileId)
     if not library or not library.profiles then return false end
-    if index < 1 or index > #library.profiles then return false end
+    if index < 0 or index > #library.profiles then return false end
     library.activeIndex = index
     CustomProfile.InvalidateWrapper(profileId)
     return true

@@ -202,7 +202,7 @@ local function CreateMainFrame()
     divider:SetColorTexture(0.3, 0.3, 0.3, 1)
     f._divider = divider
 
-    -- Profile library selector (hidden by default, shown when 2+ profiles exist)
+    -- Profile selector (always visible: built-in + custom entries)
     local libSelector = CreateFrame("Frame", nil, f)
     libSelector:SetHeight(26)
     libSelector:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -35)
@@ -212,7 +212,7 @@ local function CreateMainFrame()
 
     local libLabel = libSelector:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     libLabel:SetPoint("LEFT", libSelector, "LEFT", 4, 0)
-    libLabel:SetText("Active:")
+    libLabel:SetText("Profile:")
     f._libLabel = libLabel
 
     local libDropdown = CreateFrame("Frame", "TrueShotRBLibDD", libSelector, "UIDropDownMenuTemplate")
@@ -689,45 +689,68 @@ function RuleBuilder:Open()
     _selectedIndex = nil
     _selectedVarIndex = nil
 
-    -- Profile library selector
-    local libraryCount = CustomProfile.GetLibraryCount and CustomProfile.GetLibraryCount(profileId) or 0
-    if _isCustomized and libraryCount > 1 then
-        _mainFrame._libSelector:Show()
-        -- Shift divider and left panel down to make room
-        _mainFrame._divider:ClearAllPoints()
-        _mainFrame._divider:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -60)
-        _mainFrame._divider:SetPoint("TOPRIGHT", _mainFrame, "TOPRIGHT", -8, -60)
-        _mainFrame._leftPanel:ClearAllPoints()
-        _mainFrame._leftPanel:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -64)
-        _mainFrame._leftPanel:SetPoint("BOTTOMLEFT", _mainFrame, "BOTTOMLEFT", 8, 44)
+    -- Always-visible profile selector (built-in + custom entries)
+    _mainFrame._libSelector:Show()
+    _mainFrame._divider:ClearAllPoints()
+    _mainFrame._divider:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -60)
+    _mainFrame._divider:SetPoint("TOPRIGHT", _mainFrame, "TOPRIGHT", -8, -60)
+    _mainFrame._leftPanel:ClearAllPoints()
+    _mainFrame._leftPanel:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -64)
+    _mainFrame._leftPanel:SetPoint("BOTTOMLEFT", _mainFrame, "BOTTOMLEFT", 8, 44)
 
-        local activeIdx = CustomProfile.GetActiveIndex(profileId)
-        local library = CustomProfile.GetProfileLibrary(profileId)
-        UIDropDownMenu_Initialize(_mainFrame._libDropdown, function()
+    local library = CustomProfile.GetProfileLibrary(profileId)
+    local activeIdx = library and CustomProfile.GetActiveIndex(profileId) or nil
+
+    UIDropDownMenu_Initialize(_mainFrame._libDropdown, function()
+        -- Built-in option (always first)
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = "Built-in: " .. (baseProfile.displayName or profileId)
+        info.checked = (not _isCustomized)
+        info.func = function()
+            _isCustomized = false
+            _editingData = {
+                rules = baseProfile.rules or {},
+                stateVarDefs = {},
+                triggers = {},
+                rotationalSpells = baseProfile.rotationalSpells or {},
+            }
+            -- Tell the engine to use built-in (activeIndex 0 = none active)
+            if library then
+                CustomProfile.SetActiveIndex(profileId, 0)
+            end
+            CustomProfile.InvalidateWrapper(profileId)
+            TrueShot.Engine:ActivateProfile(baseProfile.specID)
+            RuleBuilder:Open()
+        end
+        UIDropDownMenu_AddButton(info)
+
+        -- Custom library entries
+        if library and library.profiles then
             for i, entry in ipairs(library.profiles) do
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = entry.name or ("Profile " .. i)
-                info.checked = (i == activeIdx)
-                info.func = function()
+                local cinfo = UIDropDownMenu_CreateInfo()
+                cinfo.text = entry.name or ("Custom " .. i)
+                cinfo.checked = (_isCustomized and activeIdx == i)
+                cinfo.func = function()
                     CustomProfile.SetActiveIndex(profileId, i)
                     TrueShot.Engine:ActivateProfile(baseProfile.specID)
                     RuleBuilder:Open()
                 end
-                UIDropDownMenu_AddButton(info)
+                UIDropDownMenu_AddButton(cinfo)
             end
-        end)
+        end
+    end)
+
+    -- Set dropdown text
+    if _isCustomized and library and library.profiles and activeIdx and activeIdx > 0 then
         local activeName = library.profiles[activeIdx] and library.profiles[activeIdx].name or "Custom"
         UIDropDownMenu_SetText(_mainFrame._libDropdown, activeName)
     else
-        _mainFrame._libSelector:Hide()
-        -- Restore normal divider and left panel positions
-        _mainFrame._divider:ClearAllPoints()
-        _mainFrame._divider:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -34)
-        _mainFrame._divider:SetPoint("TOPRIGHT", _mainFrame, "TOPRIGHT", -8, -34)
-        _mainFrame._leftPanel:ClearAllPoints()
-        _mainFrame._leftPanel:SetPoint("TOPLEFT", _mainFrame, "TOPLEFT", 8, -38)
-        _mainFrame._leftPanel:SetPoint("BOTTOMLEFT", _mainFrame, "BOTTOMLEFT", 8, 44)
+        UIDropDownMenu_SetText(_mainFrame._libDropdown, "Built-in: " .. (baseProfile.displayName or profileId))
     end
+
+    -- Only show Delete button when viewing a custom entry with 2+ entries
+    local libraryCount = library and library.profiles and #library.profiles or 0
+    _mainFrame._libDelBtn:SetShown(_isCustomized and libraryCount > 1)
 
     self:RefreshRuleList()
     self:UpdateButtonStates()
