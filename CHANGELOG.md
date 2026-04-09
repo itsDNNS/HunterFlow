@@ -10,6 +10,11 @@
   - Strict security: no code execution, whitelist-based parsing
   - Export/Import buttons in the Rule Builder
   - Profiles are tied to their target spec and only activate on the matching character
+- **Profile Library**: Multiple custom profiles per spec with instant switching
+  - Import adds to library instead of overwriting
+  - Profile selector dropdown in Rule Builder when 2+ profiles exist
+  - Delete individual profiles from the library
+  - Auto-migration from previous single-profile storage format
 
 ## v0.19.0 - 2026-04-09
 
