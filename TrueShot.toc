@@ -11,6 +11,7 @@
 ## OptionalDeps: Masque
 
 Engine.lua
+CustomProfile.lua
 Profiles/BM_DarkRanger.lua
 Profiles/BM_PackLeader.lua
 Profiles/MM_DarkRanger.lua
@@ -37,6 +38,5 @@ SettingsPanel.lua
 SignalProbe.lua
 CombatTrace.lua
 Scorecard.lua
-CustomProfile.lua
 ProfileIO.lua
 RuleBuilder.lua

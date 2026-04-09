@@ -92,7 +92,8 @@ local function SerializeValue(val, depth)
         if val == math.floor(val) and val >= -2147483648 and val <= 2147483647 then
             return string.format("%d", val)
         end
-        return string.format("%.6g", val)
+        -- Use fixed decimal to avoid scientific notation (parser doesn't handle 'e')
+        return string.format("%.10f", val):gsub("0+$", "0"):gsub("%.$", ".0")
     elseif vtype == "string" then
         -- Escape special characters
         local escaped = val:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\t", "\\t")
@@ -473,10 +474,19 @@ local function ValidateConditionTree(cond, depth, allowedConditions)
     end
 
     if condType == "and" or condType == "or" then
+        if type(cond.left) ~= "table" then
+            return false, "'" .. condType .. "' condition missing 'left'"
+        end
+        if type(cond.right) ~= "table" then
+            return false, "'" .. condType .. "' condition missing 'right'"
+        end
         local ok, err = ValidateConditionTree(cond.left, depth + 1, allowedConditions)
         if not ok then return false, err end
         return ValidateConditionTree(cond.right, depth + 1, allowedConditions)
     elseif condType == "not" then
+        if type(cond.inner) ~= "table" then
+            return false, "'not' condition missing 'inner'"
+        end
         return ValidateConditionTree(cond.inner, depth + 1, allowedConditions)
     else
         -- Primitive: must be in allowed set
@@ -647,6 +657,9 @@ function ProfileIO.Validate(data)
                 elseif (def.varType == "number" or def.varType == "timestamp") and type(def.default) ~= "number" then
                     errors[#errors + 1] = "stateVarDef " .. i .. ": default must be a number"
                 end
+                if def.label ~= nil and type(def.label) ~= "string" then
+                    errors[#errors + 1] = "stateVarDef " .. i .. ": label must be a string or nil"
+                end
                 if def.name then varNames[def.name] = (varNames[def.name] or 0) + 1 end
             end
         end
@@ -663,6 +676,38 @@ function ProfileIO.Validate(data)
                 end
                 if type(trig.varName) ~= "string" or not varNames[trig.varName] then
                     errors[#errors + 1] = "Trigger " .. i .. ": varName '" .. tostring(trig.varName) .. "' not found in stateVarDefs"
+                end
+                -- Validate setNow
+                if trig.setNow ~= nil and type(trig.setNow) ~= "boolean" then
+                    errors[#errors + 1] = "Trigger " .. i .. ": setNow must be boolean or nil"
+                end
+                -- Validate resetAfter
+                if trig.resetAfter ~= nil then
+                    if type(trig.resetAfter) ~= "number" or trig.resetAfter <= 0 then
+                        errors[#errors + 1] = "Trigger " .. i .. ": resetAfter must be a positive number"
+                    end
+                end
+                -- Validate value type against referenced var
+                if trig.varName and varNames[trig.varName] then
+                    local refDef = nil
+                    for _, def in ipairs(data.stateVarDefs or {}) do
+                        if def.name == trig.varName then refDef = def; break end
+                    end
+                    if refDef and not trig.setNow then
+                        if refDef.varType == "boolean" and type(trig.value) ~= "boolean" then
+                            errors[#errors + 1] = "Trigger " .. i .. ": value must be boolean for var type " .. refDef.varType
+                        elseif (refDef.varType == "number" or refDef.varType == "timestamp") and type(trig.value) ~= "number" then
+                            errors[#errors + 1] = "Trigger " .. i .. ": value must be number for var type " .. refDef.varType
+                        end
+                    end
+                    -- Validate resetValue type
+                    if trig.resetValue ~= nil and refDef then
+                        if refDef.varType == "boolean" and type(trig.resetValue) ~= "boolean" then
+                            errors[#errors + 1] = "Trigger " .. i .. ": resetValue must be boolean"
+                        elseif (refDef.varType == "number" or refDef.varType == "timestamp") and type(trig.resetValue) ~= "number" then
+                            errors[#errors + 1] = "Trigger " .. i .. ": resetValue must be number"
+                        end
+                    end
                 end
                 if trig.guard then
                     local ok, err = ValidateConditionTree(trig.guard, 0, allowedConditions)
@@ -743,6 +788,25 @@ function ProfileIO.Validate(data)
     end
     if data.specID and currentSpecID and data.specID ~= currentSpecID then
         warnings[#warnings + 1] = "Profile targets a different spec (will activate when you switch)"
+    end
+
+    -- displayName differs from built-in
+    if data.profileId and data.displayName then
+        local baseProfile = ResolveBaseProfile(data.profileId)
+        if baseProfile and baseProfile.displayName and data.displayName ~= baseProfile.displayName then
+            warnings[#warnings + 1] = "Display name differs from built-in: '" .. data.displayName .. "'"
+        end
+    end
+
+    -- Trigger spell availability
+    if IsPlayerSpell and data.triggers then
+        for _, trig in ipairs(data.triggers) do
+            if trig.spellID and not IsPlayerSpell(trig.spellID) then
+                local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(trig.spellID) or trig.spellID
+                warnings[#warnings + 1] = "Trigger spell " .. tostring(name) .. " not known by this character"
+                break
+            end
+        end
     end
 
     return #errors == 0, errors, warnings
