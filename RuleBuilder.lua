@@ -648,14 +648,30 @@ function RuleBuilder:OnApply()
 
     -- Validate rules before saving
     for i, rule in ipairs(_editingData.rules or {}) do
-        if not rule.spellID then
-            print("|cffff0000[TS]|r Rule " .. i .. " has no spell selected. Fix before applying.")
+        if not rule.spellID or type(rule.spellID) ~= "number" then
+            print("|cffff0000[TS]|r Rule " .. i .. " has no valid spell selected. Fix before applying.")
+            return
+        end
+        if not rule.type then
+            print("|cffff0000[TS]|r Rule " .. i .. " has no type selected. Fix before applying.")
+            return
+        end
+    end
+    -- Validate triggers
+    for i, trig in ipairs(_editingData.triggers or {}) do
+        if not trig.spellID or type(trig.spellID) ~= "number" then
+            print("|cffff0000[TS]|r Trigger " .. i .. " has no valid spell selected. Fix before applying.")
+            return
+        end
+        if not trig.varName or trig.varName == "" then
+            print("|cffff0000[TS]|r Trigger " .. i .. " has no variable assigned. Fix before applying.")
             return
         end
     end
 
     local baseProfile = profile._baseProfile or profile
-    CustomProfile.SaveCustomData(baseProfile.id, _editingData)
+    -- Save a copy so continued editing doesn't mutate SavedVariables
+    CustomProfile.SaveCustomData(baseProfile.id, DeepCopy(_editingData))
     CustomProfile.InvalidateWrapper(baseProfile.id)
 
     -- Register custom conditions
@@ -1527,15 +1543,12 @@ function RuleBuilder:ShowStateVarEditor(varIndex)
     nameEdit:SetAutoFocus(false)
     nameEdit:SetText(def.name or "")
 
-    -- Check if this var already exists in saved data (renaming would break wiring)
-    local baseProfile = (TrueShot.Engine and TrueShot.Engine.activeProfile)
-    local baseId = baseProfile and (baseProfile._baseProfile or baseProfile).id
-    local savedData = baseId and CustomProfile.GetCustomData(baseId)
-    local isSavedVar = false
-    if savedData and savedData.stateVarDefs then
-        for _, savedDef in ipairs(savedData.stateVarDefs) do
-            if savedDef.name == def.name then
-                isSavedVar = true
+    -- Lock name if any trigger references it (prevents wiring breakage)
+    local hasReferences = false
+    if _editingData and _editingData.triggers then
+        for _, trig in ipairs(_editingData.triggers) do
+            if trig.varName == def.name then
+                hasReferences = true
                 break
             end
         end
@@ -1544,10 +1557,10 @@ function RuleBuilder:ShowStateVarEditor(varIndex)
     local nameHint = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     nameHint:SetPoint("TOPLEFT", nameEdit, "BOTTOMLEFT", 0, -2)
 
-    if isSavedVar then
+    if hasReferences then
         nameEdit:Disable()
         nameEdit:SetTextColor(0.5, 0.5, 0.5)
-        nameHint:SetText("|cff888888Locked after creation (referenced by triggers/conditions)|r")
+        nameHint:SetText("|cff888888Locked (referenced by triggers)|r")
     else
         nameHint:SetText("|cff888888Alphanumeric + underscore, used as condition ID|r")
         local function ApplyName()

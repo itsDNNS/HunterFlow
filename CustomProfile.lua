@@ -120,7 +120,8 @@ function CustomProfile.ForkProfile(baseProfile)
         triggers = {},
         rotationalSpells = DeepCopy(baseProfile.rotationalSpells or {}),
     }
-    CustomProfile.SaveCustomData(baseProfile.id, data)
+    -- Do NOT save immediately -- return a working copy.
+    -- Only persisted when user clicks Apply.
     return data
 end
 
@@ -383,16 +384,21 @@ function CustomProfile.WrapActivation()
 end
 
 function CustomProfile.RegisterCustomConditions(profileId, stateVarDefs)
-    local schemas = {}
+    -- Clear previous custom conditions for this profile
+    local source = profileId .. "_custom"
+    for id, schema in pairs(_conditionSchemas) do
+        if schema.source == source then
+            _conditionSchemas[id] = nil
+        end
+    end
+    -- Register current defs
     for _, def in ipairs(stateVarDefs or {}) do
-        schemas[#schemas + 1] = {
+        _conditionSchemas[def.name] = {
             id = def.name,
             label = def.label or def.name,
             params = {},
+            source = source,
         }
-    end
-    if #schemas > 0 then
-        CustomProfile.RegisterConditionSchema(profileId .. "_custom", schemas)
     end
 end
 
