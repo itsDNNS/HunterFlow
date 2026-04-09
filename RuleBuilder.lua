@@ -827,32 +827,31 @@ end
 
 local _hintText = nil  -- reusable hint FontString
 
--- Disable all interactive controls in tracked editor frames (read-only mode)
+-- Recursively disable all interactive controls in a frame tree (read-only mode)
+local function DisableFrameTree(frame)
+    if not frame then return end
+    local objType = frame:IsObjectType("Button") and "Button"
+        or frame:IsObjectType("EditBox") and "EditBox"
+        or nil
+    if objType == "Button" and frame.Disable then
+        frame:Disable()
+    elseif objType == "EditBox" and frame.SetEnabled then
+        frame:SetEnabled(false)
+    end
+    -- Disable UIDropDownMenu button children (named *Button)
+    local name = frame:GetName()
+    if name then
+        local ddBtn = _G[name .. "Button"]
+        if ddBtn and ddBtn.Disable then ddBtn:Disable() end
+    end
+    for i = 1, frame:GetNumChildren() do
+        DisableFrameTree(select(i, frame:GetChildren()))
+    end
+end
+
 local function DisableEditorControls()
     for _, frame in ipairs(_editorFrames) do
-        -- Disable buttons
-        if frame.Disable and frame:IsObjectType("Button") then
-            frame:Disable()
-        end
-        -- Disable editboxes
-        if frame:IsObjectType("EditBox") then
-            frame:SetEnabled(false)
-        end
-        -- Recurse into children
-        for i = 1, frame:GetNumChildren() do
-            local child = select(i, frame:GetChildren())
-            if child.Disable and child:IsObjectType("Button") then
-                child:Disable()
-            end
-            if child.SetEnabled and child:IsObjectType("EditBox") then
-                child:SetEnabled(false)
-            end
-            -- Dropdowns: disable their button child
-            if child:GetName() and child:GetName():find("DropDown") then
-                local ddBtn = _G[child:GetName() .. "Button"]
-                if ddBtn and ddBtn.Disable then ddBtn:Disable() end
-            end
-        end
+        DisableFrameTree(frame)
     end
 end
 
