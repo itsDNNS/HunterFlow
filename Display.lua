@@ -688,11 +688,17 @@ local function RenderAoeHint(spellID)
     aoeHintIcon:SetSize(iconSize, iconSize)
     aoeHintIcon:SetAlpha(1)
     aoeHintIcon:ClearAllPoints()
-    if orient == "DOWN" then
-        aoeHintIcon:SetPoint("RIGHT", icons[1], "LEFT", -spacing, 0)
-    elseif orient == "UP" then
-        aoeHintIcon:SetPoint("LEFT", icons[1], "RIGHT", spacing, 0)
+    local aoePos = TrueShot.GetOpt("aoeHintPosition") or "BELOW"
+    if aoePos == "LEFT" then
+        -- Position to the left of the primary icon, offset past queue icons if RIGHT orientation
+        if orient == "RIGHT" then
+            -- Queue grows right; place left of container to avoid overlap with icon 2
+            aoeHintIcon:SetPoint("RIGHT", container, "LEFT", -spacing, 0)
+        else
+            aoeHintIcon:SetPoint("RIGHT", icons[1], "LEFT", -spacing, 0)
+        end
     else
+        -- BELOW: always below icon 1, regardless of orientation
         aoeHintIcon:SetPoint("TOP", icons[1], "BOTTOM", 0, -spacing)
     end
 
@@ -1000,15 +1006,26 @@ function Display:UpdateContainerSize()
 
     reasonText:ClearAllPoints()
     phaseText:ClearAllPoints()
+    local reasonPos = TrueShot.GetOpt("reasonPosition") or "BELOW"
     if isVertical then
-        reasonText:SetPoint("LEFT", container, "RIGHT", 4, -8)
+        if reasonPos == "ABOVE" then
+            reasonText:SetPoint("LEFT", container, "RIGHT", 4, 8)
+            phaseText:SetPoint("LEFT", container, "RIGHT", 4, -8)
+        else
+            reasonText:SetPoint("LEFT", container, "RIGHT", 4, -8)
+            phaseText:SetPoint("LEFT", container, "RIGHT", 4, 8)
+        end
         reasonText:SetJustifyH("LEFT")
-        phaseText:SetPoint("LEFT", container, "RIGHT", 4, 8)
         phaseText:SetJustifyH("LEFT")
     else
-        reasonText:SetPoint("TOP", container, "BOTTOM", 0, -2)
+        if reasonPos == "ABOVE" then
+            reasonText:SetPoint("BOTTOM", container, "TOP", 0, 2)
+            phaseText:SetPoint("TOP", container, "BOTTOM", 0, -2)
+        else
+            reasonText:SetPoint("TOP", container, "BOTTOM", 0, -2)
+            phaseText:SetPoint("BOTTOM", container, "TOP", 0, 2)
+        end
         reasonText:SetJustifyH("CENTER")
-        phaseText:SetPoint("BOTTOM", container, "TOP", 0, 2)
         phaseText:SetJustifyH("CENTER")
     end
 
