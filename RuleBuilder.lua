@@ -31,6 +31,25 @@ local TYPE_LABELS = {
     BLACKLIST_CONDITIONAL = "BL?",
 }
 
+local TYPE_ORDER = { "PIN", "PREFER", "BLACKLIST", "BLACKLIST_CONDITIONAL" }
+
+local CONDITION_PRESETS = {
+    { label = "Spell Proc Active",      template = { type = "spell_glowing", spellID = nil } },
+    { label = "AoE (2+ targets)",       template = { type = "target_count", op = ">=", value = 2 } },
+    { label = "Burst Mode Active",      template = { type = "burst_mode" } },
+    { label = "Combat Opening",         template = { type = "combat_opening", duration = 2 } },
+    { label = "Spell Charges At/Above", template = { type = "spell_charges", spellID = nil, op = ">=", value = 2 } },
+}
+
+local MAX_CONDITION_DEPTH = 4
+local INDENT_PER_DEPTH = 16
+
+local _ddCounter = 0
+local function NextDropdownName(prefix)
+    _ddCounter = _ddCounter + 1
+    return prefix .. _ddCounter
+end
+
 ------------------------------------------------------------------------
 -- State
 ------------------------------------------------------------------------
@@ -42,6 +61,8 @@ local _ruleRows = {}
 local _selectedIndex = nil
 local _editingData = nil  -- the custom data being edited
 local _isCustomized = false
+local _editorFrames = {}  -- tracked frames for editor cleanup
+local RenderConditionTree  -- forward declaration for recursive rendering
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -52,6 +73,35 @@ local function GetSpellDisplay(spellID)
     local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or "Spell " .. spellID
     local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID) or 134400
     return icon, name
+end
+
+local function DeepCopy(orig)
+    if type(orig) ~= "table" then return orig end
+    local copy = {}
+    for k, v in pairs(orig) do
+        copy[k] = DeepCopy(v)
+    end
+    return copy
+end
+
+local function GetRotationalSpellList()
+    if not _editingData or not _editingData.rotationalSpells then return {} end
+    local list = {}
+    for spellID in pairs(_editingData.rotationalSpells) do
+        if type(spellID) == "number" then
+            list[#list + 1] = spellID
+        end
+    end
+    table.sort(list)
+    return list
+end
+
+local function GetProfileId()
+    local Engine = TrueShot.Engine
+    local profile = Engine and Engine.activeProfile
+    if not profile then return nil end
+    local base = profile._baseProfile or profile
+    return base.id
 end
 
 ------------------------------------------------------------------------
@@ -428,6 +478,7 @@ end
 function RuleBuilder:ClearRightPanel()
     -- Clear all children of the right panel
     if not _rightPanel then return end
+    ClearEditorFrames()
     for _, child in pairs({ _rightPanel:GetChildren() }) do
         child:Hide()
         child:SetParent(nil)
@@ -555,7 +606,698 @@ function RuleBuilder:OnAddStateVar()
     -- Placeholder: Task 8 implements the state variable editor
 end
 
+------------------------------------------------------------------------
+-- Right Panel: Rule Editor with Condition Builder
+------------------------------------------------------------------------
+
+local function ClearEditorFrames()
+    for _, frame in ipairs(_editorFrames) do
+        frame:Hide()
+        frame:SetParent(nil)
+    end
+    wipe(_editorFrames)
+end
+
+local function TrackFrame(frame)
+    _editorFrames[#_editorFrames + 1] = frame
+    return frame
+end
+
+------------------------------------------------------------------------
+-- Condition Node Rendering
+------------------------------------------------------------------------
+
+local function CreateNodeDeleteButton(parent, onDelete)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(14, 14)
+    btn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
+    local tex = btn:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints()
+    tex:SetColorTexture(0.8, 0.2, 0.2, 0.6)
+    local label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    label:SetPoint("CENTER")
+    label:SetText("x")
+    btn:SetScript("OnClick", onDelete)
+    btn:SetScript("OnEnter", function() tex:SetColorTexture(1.0, 0.3, 0.3, 0.8) end)
+    btn:SetScript("OnLeave", function() tex:SetColorTexture(0.8, 0.2, 0.2, 0.6) end)
+    return btn
+end
+
+local function CreateBadge(parent, text, r, g, b)
+    local badge = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    badge:SetText("|cff" .. string.format("%02x%02x%02x", r * 255, g * 255, b * 255) .. text .. "|r")
+    return badge
+end
+
+local function CreateConditionTypeDropdown(parent, condition, profileId, onChange)
+    local ddName = NextDropdownName("TrueShotRBCondType_")
+    local dd = CreateFrame("Frame", ddName, parent, "UIDropDownMenuTemplate")
+    UIDropDownMenu_SetWidth(dd, 130)
+
+    local schemas = CustomProfile.GetConditionSchemasForProfile(profileId)
+
+    UIDropDownMenu_Initialize(dd, function()
+        for _, schema in ipairs(schemas) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = schema.label
+            info.checked = (condition.type == schema.id)
+            info.func = function()
+                condition.type = schema.id
+                -- Apply defaults from new schema
+                for _, param in ipairs(schema.params) do
+                    if condition[param.field] == nil and param.default ~= nil then
+                        condition[param.field] = param.default
+                    end
+                end
+                UIDropDownMenu_SetText(dd, schema.label)
+                if onChange then onChange() end
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+
+    -- Set initial text
+    local currentSchema
+    for _, s in ipairs(schemas) do
+        if s.id == condition.type then currentSchema = s break end
+    end
+    UIDropDownMenu_SetText(dd, currentSchema and currentSchema.label or condition.type or "(select)")
+
+    return dd
+end
+
+local function CreateParamInputs(parent, condition, schema, anchorTo, onChange)
+    if not schema or not schema.params then return anchorTo end
+
+    local lastAnchor = anchorTo
+    for _, param in ipairs(schema.params) do
+        if param.fieldType == "spell" then
+            -- Spell dropdown from rotational spells
+            local ddName = NextDropdownName("TrueShotRBParam_")
+            local dd = CreateFrame("Frame", ddName, parent, "UIDropDownMenuTemplate")
+            TrackFrame(dd)
+            dd:SetPoint("TOPLEFT", lastAnchor, "BOTTOMLEFT", 0, -2)
+            UIDropDownMenu_SetWidth(dd, 130)
+
+            local spellList = GetRotationalSpellList()
+            UIDropDownMenu_Initialize(dd, function()
+                for _, sid in ipairs(spellList) do
+                    local sIcon, sName = GetSpellDisplay(sid)
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = sName
+                    info.icon = sIcon
+                    info.checked = (condition[param.field] == sid)
+                    info.func = function()
+                        condition[param.field] = sid
+                        UIDropDownMenu_SetText(dd, sName)
+                        if onChange then onChange() end
+                    end
+                    UIDropDownMenu_AddButton(info)
+                end
+            end)
+
+            local _, curName = GetSpellDisplay(condition[param.field])
+            UIDropDownMenu_SetText(dd, curName)
+            lastAnchor = dd
+
+        elseif param.fieldType == "operator" then
+            local ddName = NextDropdownName("TrueShotRBOp_")
+            local dd = CreateFrame("Frame", ddName, parent, "UIDropDownMenuTemplate")
+            TrackFrame(dd)
+            dd:SetPoint("TOPLEFT", lastAnchor, "BOTTOMLEFT", 0, -2)
+            UIDropDownMenu_SetWidth(dd, 60)
+
+            local choices = param.choices or { ">=", ">", "==", "<", "<=" }
+            UIDropDownMenu_Initialize(dd, function()
+                for _, op in ipairs(choices) do
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = op
+                    info.checked = (condition[param.field] == op)
+                    info.func = function()
+                        condition[param.field] = op
+                        UIDropDownMenu_SetText(dd, op)
+                        if onChange then onChange() end
+                    end
+                    UIDropDownMenu_AddButton(info)
+                end
+            end)
+            UIDropDownMenu_SetText(dd, condition[param.field] or choices[1] or "")
+            lastAnchor = dd
+
+        elseif param.fieldType == "number" then
+            local container = CreateFrame("Frame", nil, parent)
+            TrackFrame(container)
+            container:SetSize(200, 22)
+            container:SetPoint("TOPLEFT", lastAnchor, "BOTTOMLEFT", 0, -4)
+
+            local label = container:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            label:SetPoint("LEFT", container, "LEFT", 0, 0)
+            label:SetText((param.label or param.field) .. ":")
+
+            local editBox = CreateFrame("EditBox", nil, container, "InputBoxTemplate")
+            editBox:SetSize(60, 20)
+            editBox:SetPoint("LEFT", label, "RIGHT", 6, 0)
+            editBox:SetAutoFocus(false)
+            editBox:SetNumeric(false)
+            editBox:SetText(tostring(condition[param.field] or param.default or ""))
+
+            local function ApplyValue()
+                local val = tonumber(editBox:GetText())
+                if val then
+                    condition[param.field] = val
+                    if onChange then onChange() end
+                end
+            end
+            editBox:SetScript("OnEnterPressed", function(self)
+                ApplyValue()
+                self:ClearFocus()
+            end)
+            editBox:SetScript("OnEditFocusLost", ApplyValue)
+
+            lastAnchor = container
+        end
+    end
+    return lastAnchor
+end
+
+------------------------------------------------------------------------
+-- Recursive Condition Tree Renderer
+------------------------------------------------------------------------
+
+-- RenderConditionTree returns the last anchored frame and total height used
+-- parent: the scroll child or container frame
+-- condition: the condition table node
+-- depth: current nesting depth (0-based)
+-- path: string path for unique naming (e.g., "root_L_R")
+-- onChange: callback when condition changes (triggers re-render)
+-- getConditionRef: function() returns the parent table and key holding this condition
+--                  so we can replace/delete it
+
+RenderConditionTree = function(parent, condition, depth, path, onChange, anchorFrame, anchorOffset)
+    local profileId = GetProfileId()
+
+    if not condition then
+        -- No condition set: show "Set condition" and "Preset" buttons
+        local container = CreateFrame("Frame", nil, parent)
+        TrackFrame(container)
+        container:SetSize(400, 26)
+        if anchorFrame then
+            container:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, anchorOffset or -4)
+        else
+            container:SetPoint("TOPLEFT", parent, "TOPLEFT", depth * INDENT_PER_DEPTH, 0)
+        end
+
+        local addBtn = CreateFrame("Button", nil, container, "UIPanelButtonTemplate")
+        addBtn:SetSize(110, 20)
+        addBtn:SetPoint("LEFT", container, "LEFT", 0, 0)
+        addBtn:SetText("+ Set Condition")
+        addBtn:SetScript("OnClick", function()
+            -- Default: create a burst_mode primitive
+            return onChange({ type = "burst_mode" })
+        end)
+
+        local presetBtn = CreateFrame("Button", nil, container, "UIPanelButtonTemplate")
+        presetBtn:SetSize(90, 20)
+        presetBtn:SetPoint("LEFT", addBtn, "RIGHT", 4, 0)
+        presetBtn:SetText("+ Preset...")
+        presetBtn:SetScript("OnClick", function()
+            local menuFrame = CreateFrame("Frame", NextDropdownName("TrueShotRBPreset_"), UIParent, "UIDropDownMenuTemplate")
+            UIDropDownMenu_Initialize(menuFrame, function()
+                for _, preset in ipairs(CONDITION_PRESETS) do
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = preset.label
+                    info.notCheckable = true
+                    info.func = function()
+                        onChange(DeepCopy(preset.template))
+                    end
+                    UIDropDownMenu_AddButton(info)
+                end
+            end, "MENU")
+            ToggleDropDownMenu(1, nil, menuFrame, "cursor", 0, 0)
+        end)
+
+        return container, 26
+    end
+
+    local nodeType = condition.type
+
+    ---------- AND / OR combinator ----------
+    if nodeType == "and" or nodeType == "or" then
+        local container = CreateFrame("Frame", nil, parent)
+        TrackFrame(container)
+        container:SetSize(400, 22)
+        if anchorFrame then
+            container:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, anchorOffset or -4)
+        else
+            container:SetPoint("TOPLEFT", parent, "TOPLEFT", depth * INDENT_PER_DEPTH, 0)
+        end
+
+        -- Combinator badge
+        local badgeColor = nodeType == "and" and { 0.2, 0.7, 0.7 } or { 0.3, 0.5, 0.9 }
+        local badge = CreateBadge(container, string.upper(nodeType), badgeColor[1], badgeColor[2], badgeColor[3])
+        badge:SetPoint("LEFT", container, "LEFT", 0, 0)
+
+        -- Toggle AND/OR dropdown
+        local ddName = NextDropdownName("TrueShotRBComb_")
+        local dd = CreateFrame("Frame", ddName, container, "UIDropDownMenuTemplate")
+        dd:SetPoint("LEFT", badge, "RIGHT", 0, 0)
+        UIDropDownMenu_SetWidth(dd, 60)
+        UIDropDownMenu_Initialize(dd, function()
+            for _, op in ipairs({ "and", "or" }) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = string.upper(op)
+                info.checked = (condition.type == op)
+                info.func = function()
+                    condition.type = op
+                    UIDropDownMenu_SetText(dd, string.upper(op))
+                    onChange(nil) -- re-render, no replacement
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+        UIDropDownMenu_SetText(dd, string.upper(nodeType))
+
+        -- Delete button
+        CreateNodeDeleteButton(container, function()
+            onChange(nil, true) -- signal deletion
+        end)
+
+        -- Render left child
+        local totalHeight = 22
+        local leftContainer = CreateFrame("Frame", nil, parent)
+        TrackFrame(leftContainer)
+        leftContainer:SetSize(400 - INDENT_PER_DEPTH, 20)
+        leftContainer:SetPoint("TOPLEFT", container, "BOTTOMLEFT", INDENT_PER_DEPTH, -2)
+
+        -- Vertical connecting line
+        local vline = leftContainer:CreateTexture(nil, "BACKGROUND")
+        vline:SetWidth(1)
+        vline:SetPoint("TOPLEFT", leftContainer, "TOPLEFT", -6, 2)
+        vline:SetColorTexture(0.4, 0.4, 0.4, 0.6)
+
+        local leftLabel = leftContainer:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        leftLabel:SetPoint("TOPLEFT", leftContainer, "TOPLEFT", 0, 0)
+        leftLabel:SetText("|cff888888L:|r")
+
+        local lastLeft, leftH = RenderConditionTree(parent, condition.left, depth + 1, path .. "_L", function(replacement, isDelete)
+            if isDelete then
+                -- Replace combinator with right child
+                onChange(condition.right)
+            elseif replacement then
+                condition.left = replacement
+                onChange(nil) -- re-render
+            else
+                onChange(nil) -- re-render
+            end
+        end, leftLabel, -2)
+        totalHeight = totalHeight + leftH + 4
+
+        -- Render right child
+        local rightLabelFrame = CreateFrame("Frame", nil, parent)
+        TrackFrame(rightLabelFrame)
+        rightLabelFrame:SetSize(20, 14)
+        rightLabelFrame:SetPoint("TOPLEFT", lastLeft, "BOTTOMLEFT", 0, -4)
+        local rightLabel = rightLabelFrame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        rightLabel:SetPoint("LEFT", rightLabelFrame, "LEFT", 0, 0)
+        rightLabel:SetText("|cff888888R:|r")
+
+        local lastRight, rightH = RenderConditionTree(parent, condition.right, depth + 1, path .. "_R", function(replacement, isDelete)
+            if isDelete then
+                -- Replace combinator with left child
+                onChange(condition.left)
+            elseif replacement then
+                condition.right = replacement
+                onChange(nil)
+            else
+                onChange(nil)
+            end
+        end, rightLabelFrame, -2)
+        totalHeight = totalHeight + rightH + 6
+
+        -- Extend vertical line
+        vline:SetPoint("BOTTOMLEFT", lastRight, "BOTTOMLEFT", -6 - INDENT_PER_DEPTH, 0)
+
+        return lastRight, totalHeight
+
+    ---------- NOT combinator ----------
+    elseif nodeType == "not" then
+        local container = CreateFrame("Frame", nil, parent)
+        TrackFrame(container)
+        container:SetSize(400, 22)
+        if anchorFrame then
+            container:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, anchorOffset or -4)
+        else
+            container:SetPoint("TOPLEFT", parent, "TOPLEFT", depth * INDENT_PER_DEPTH, 0)
+        end
+
+        local badge = CreateBadge(container, "NOT", 0.9, 0.3, 0.3)
+        badge:SetPoint("LEFT", container, "LEFT", 0, 0)
+
+        CreateNodeDeleteButton(container, function()
+            -- When deleting NOT, unwrap to inner
+            onChange(condition.inner)
+        end)
+
+        local totalHeight = 22
+
+        local innerContainer = CreateFrame("Frame", nil, parent)
+        TrackFrame(innerContainer)
+        innerContainer:SetSize(400 - INDENT_PER_DEPTH, 20)
+        innerContainer:SetPoint("TOPLEFT", container, "BOTTOMLEFT", INDENT_PER_DEPTH, -2)
+
+        local lastInner, innerH = RenderConditionTree(parent, condition.inner, depth + 1, path .. "_N", function(replacement, isDelete)
+            if isDelete then
+                onChange(nil, true) -- delete the NOT too
+            elseif replacement then
+                condition.inner = replacement
+                onChange(nil)
+            else
+                onChange(nil)
+            end
+        end, innerContainer, 0)
+        totalHeight = totalHeight + innerH + 4
+
+        return lastInner, totalHeight
+
+    ---------- Primitive condition ----------
+    else
+        local container = CreateFrame("Frame", nil, parent)
+        TrackFrame(container)
+        container:SetSize(400, 26)
+        if anchorFrame then
+            container:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, anchorOffset or -4)
+        else
+            container:SetPoint("TOPLEFT", parent, "TOPLEFT", depth * INDENT_PER_DEPTH, 0)
+        end
+
+        -- Condition type dropdown
+        local typeDd = CreateConditionTypeDropdown(container, condition, profileId, function()
+            onChange(nil) -- re-render to update param inputs
+        end)
+        TrackFrame(typeDd)
+        typeDd:SetPoint("TOPLEFT", container, "TOPLEFT", -16, 0)
+
+        -- Delete button
+        CreateNodeDeleteButton(container, function()
+            onChange(nil, true) -- delete this node
+        end)
+
+        -- Parameter inputs based on schema
+        local schema
+        local schemas = CustomProfile.GetConditionSchemasForProfile(profileId)
+        for _, s in ipairs(schemas) do
+            if s.id == condition.type then schema = s break end
+        end
+
+        local lastParam = CreateParamInputs(container, condition, schema, typeDd, function()
+            onChange(nil)
+        end)
+
+        -- Wrap buttons (AND, OR, NOT) - only if under max depth
+        local wrapRow = CreateFrame("Frame", nil, parent)
+        TrackFrame(wrapRow)
+        wrapRow:SetSize(300, 20)
+        wrapRow:SetPoint("TOPLEFT", lastParam, "BOTTOMLEFT", 0, -4)
+
+        if depth < MAX_CONDITION_DEPTH then
+            local wrapAndBtn = CreateFrame("Button", nil, wrapRow, "UIPanelButtonTemplate")
+            wrapAndBtn:SetSize(55, 18)
+            wrapAndBtn:SetPoint("LEFT", wrapRow, "LEFT", 0, 0)
+            wrapAndBtn:SetText("+ AND")
+            wrapAndBtn:SetScript("OnClick", function()
+                local wrapped = { type = "and", left = DeepCopy(condition), right = { type = "burst_mode" } }
+                onChange(wrapped)
+            end)
+
+            local wrapOrBtn = CreateFrame("Button", nil, wrapRow, "UIPanelButtonTemplate")
+            wrapOrBtn:SetSize(50, 18)
+            wrapOrBtn:SetPoint("LEFT", wrapAndBtn, "RIGHT", 4, 0)
+            wrapOrBtn:SetText("+ OR")
+            wrapOrBtn:SetScript("OnClick", function()
+                local wrapped = { type = "or", left = DeepCopy(condition), right = { type = "burst_mode" } }
+                onChange(wrapped)
+            end)
+
+            local wrapNotBtn = CreateFrame("Button", nil, wrapRow, "UIPanelButtonTemplate")
+            wrapNotBtn:SetSize(55, 18)
+            wrapNotBtn:SetPoint("LEFT", wrapOrBtn, "RIGHT", 4, 0)
+            wrapNotBtn:SetText("+ NOT")
+            wrapNotBtn:SetScript("OnClick", function()
+                local wrapped = { type = "not", inner = DeepCopy(condition) }
+                onChange(wrapped)
+            end)
+
+            local presetBtn = CreateFrame("Button", nil, wrapRow, "UIPanelButtonTemplate")
+            presetBtn:SetSize(75, 18)
+            presetBtn:SetPoint("LEFT", wrapNotBtn, "RIGHT", 4, 0)
+            presetBtn:SetText("Preset...")
+            presetBtn:SetScript("OnClick", function()
+                local menuFrame = CreateFrame("Frame", NextDropdownName("TrueShotRBPresetP_"), UIParent, "UIDropDownMenuTemplate")
+                UIDropDownMenu_Initialize(menuFrame, function()
+                    for _, preset in ipairs(CONDITION_PRESETS) do
+                        local info = UIDropDownMenu_CreateInfo()
+                        info.text = preset.label
+                        info.notCheckable = true
+                        info.func = function()
+                            -- Wrap current condition with AND + preset
+                            local wrapped = { type = "and", left = DeepCopy(condition), right = DeepCopy(preset.template) }
+                            onChange(wrapped)
+                        end
+                        UIDropDownMenu_AddButton(info)
+                    end
+                end, "MENU")
+                ToggleDropDownMenu(1, nil, menuFrame, "cursor", 0, 0)
+            end)
+        else
+            local depthWarn = wrapRow:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+            depthWarn:SetPoint("LEFT", wrapRow, "LEFT", 0, 0)
+            depthWarn:SetText("|cff888888Max nesting depth reached|r")
+        end
+
+        -- Estimate height (dropdown ~26, params variable, wrap row ~20)
+        local paramCount = schema and #schema.params or 0
+        local estHeight = 26 + (paramCount * 28) + 24
+        return wrapRow, estHeight
+    end
+end
+
+------------------------------------------------------------------------
+-- ShowRuleEditor - builds the full right panel for a selected rule
+------------------------------------------------------------------------
+
 function RuleBuilder:ShowRuleEditor(index)
-    -- Placeholder: Task 7 implements the right panel editor
     self:ClearRightPanel()
+    ClearEditorFrames()
+
+    if not _rightPanel or not _editingData or not _isCustomized then return end
+    local rules = _editingData.rules
+    local rule = rules and rules[index]
+    if not rule then return end
+
+    local profileId = GetProfileId()
+    local rightWidth = _rightPanel:GetWidth()
+
+    -- Scroll frame for right panel content
+    local scrollFrame = CreateFrame("ScrollFrame", "TrueShotRBRightScroll", _rightPanel, "UIPanelScrollFrameTemplate")
+    TrackFrame(scrollFrame)
+    scrollFrame:SetPoint("TOPLEFT", _rightPanel, "TOPLEFT", 0, 0)
+    scrollFrame:SetPoint("BOTTOMRIGHT", _rightPanel, "BOTTOMRIGHT", -22, 0)
+
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetWidth(rightWidth - 30)
+    scrollChild:SetHeight(1) -- will be updated
+    scrollFrame:SetScrollChild(scrollChild)
+
+    -- Re-render helper (rebuilds the entire right panel)
+    local function Rerender()
+        RuleBuilder:ShowRuleEditor(index)
+    end
+
+    ----------------------------------------------------------------
+    -- 1. Rule header
+    ----------------------------------------------------------------
+    local headerLabel = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    headerLabel:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, 0)
+    headerLabel:SetText("Rule #" .. index)
+
+    ----------------------------------------------------------------
+    -- 2. Rule Type Dropdown
+    ----------------------------------------------------------------
+    local typeLabel = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    typeLabel:SetPoint("TOPLEFT", headerLabel, "BOTTOMLEFT", 0, -10)
+    typeLabel:SetText("Type:")
+
+    local typeDd = CreateFrame("Frame", NextDropdownName("TrueShotRBType_"), scrollChild, "UIDropDownMenuTemplate")
+    TrackFrame(typeDd)
+    typeDd:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", -16, -2)
+    UIDropDownMenu_SetWidth(typeDd, 180)
+
+    UIDropDownMenu_Initialize(typeDd, function()
+        for _, rtype in ipairs(TYPE_ORDER) do
+            local tc = TYPE_COLORS[rtype]
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = rtype
+            if tc then
+                info.colorCode = "|cff" .. string.format("%02x%02x%02x", tc.r * 255, tc.g * 255, tc.b * 255)
+            end
+            info.checked = (rule.type == rtype)
+            info.func = function()
+                rule.type = rtype
+                UIDropDownMenu_SetText(typeDd, rtype)
+                RuleBuilder:RefreshRuleList()
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    UIDropDownMenu_SetText(typeDd, rule.type or "PIN")
+
+    ----------------------------------------------------------------
+    -- 3. Spell Selector
+    ----------------------------------------------------------------
+    local spellLabel = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    spellLabel:SetPoint("TOPLEFT", typeDd, "BOTTOMLEFT", 16, -8)
+    spellLabel:SetText("Spell:")
+
+    local spellDd = CreateFrame("Frame", NextDropdownName("TrueShotRBSpell_"), scrollChild, "UIDropDownMenuTemplate")
+    TrackFrame(spellDd)
+    spellDd:SetPoint("TOPLEFT", spellLabel, "BOTTOMLEFT", -16, -2)
+    UIDropDownMenu_SetWidth(spellDd, 180)
+
+    local spellList = GetRotationalSpellList()
+    UIDropDownMenu_Initialize(spellDd, function()
+        for _, sid in ipairs(spellList) do
+            local sIcon, sName = GetSpellDisplay(sid)
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = sName
+            info.icon = sIcon
+            info.checked = (rule.spellID == sid)
+            info.func = function()
+                rule.spellID = sid
+                UIDropDownMenu_SetText(spellDd, sName)
+                RuleBuilder:RefreshRuleList()
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+
+    local _, curSpellName = GetSpellDisplay(rule.spellID)
+    UIDropDownMenu_SetText(spellDd, curSpellName)
+
+    -- Manual spellID input
+    local manualRow = CreateFrame("Frame", nil, scrollChild)
+    TrackFrame(manualRow)
+    manualRow:SetSize(300, 22)
+    manualRow:SetPoint("TOPLEFT", spellDd, "BOTTOMLEFT", 16, -4)
+
+    local manualLabel = manualRow:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    manualLabel:SetPoint("LEFT", manualRow, "LEFT", 0, 0)
+    manualLabel:SetText("or SpellID:")
+
+    local manualEdit = CreateFrame("EditBox", nil, manualRow, "InputBoxTemplate")
+    manualEdit:SetSize(80, 20)
+    manualEdit:SetPoint("LEFT", manualLabel, "RIGHT", 6, 0)
+    manualEdit:SetAutoFocus(false)
+    manualEdit:SetText(rule.spellID and tostring(rule.spellID) or "")
+
+    local spellWarning = manualRow:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    spellWarning:SetPoint("LEFT", manualEdit, "RIGHT", 8, 0)
+    spellWarning:SetText("")
+
+    local function ApplyManualSpell()
+        local val = tonumber(manualEdit:GetText())
+        if val and val > 0 then
+            rule.spellID = val
+            local _, name = GetSpellDisplay(val)
+            UIDropDownMenu_SetText(spellDd, name)
+            -- Check if spell is known
+            if IsPlayerSpell and not IsPlayerSpell(val) then
+                spellWarning:SetText("|cffffff00Not known|r")
+            else
+                spellWarning:SetText("")
+            end
+            RuleBuilder:RefreshRuleList()
+        end
+    end
+    manualEdit:SetScript("OnEnterPressed", function(self)
+        ApplyManualSpell()
+        self:ClearFocus()
+    end)
+    manualEdit:SetScript("OnEditFocusLost", ApplyManualSpell)
+
+    -- Show warning on initial load
+    if rule.spellID and IsPlayerSpell and not IsPlayerSpell(rule.spellID) then
+        spellWarning:SetText("|cffffff00Not known|r")
+    end
+
+    ----------------------------------------------------------------
+    -- 4. Reason Text
+    ----------------------------------------------------------------
+    local reasonLabel = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    reasonLabel:SetPoint("TOPLEFT", manualRow, "BOTTOMLEFT", 0, -10)
+    reasonLabel:SetText("Reason:")
+
+    local reasonEdit = CreateFrame("EditBox", nil, scrollChild, "InputBoxTemplate")
+    TrackFrame(reasonEdit)
+    reasonEdit:SetSize(220, 20)
+    reasonEdit:SetPoint("TOPLEFT", reasonLabel, "BOTTOMLEFT", 0, -2)
+    reasonEdit:SetAutoFocus(false)
+    reasonEdit:SetText(rule.reason or "")
+
+    local function ApplyReason()
+        local text = reasonEdit:GetText() or ""
+        rule.reason = (text ~= "") and text or nil
+        RuleBuilder:RefreshRuleList()
+    end
+    reasonEdit:SetScript("OnEnterPressed", function(self)
+        ApplyReason()
+        self:ClearFocus()
+    end)
+    reasonEdit:SetScript("OnEditFocusLost", ApplyReason)
+
+    ----------------------------------------------------------------
+    -- 5. Condition Builder
+    ----------------------------------------------------------------
+    local condHeader = scrollChild:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    condHeader:SetPoint("TOPLEFT", reasonEdit, "BOTTOMLEFT", 0, -16)
+    condHeader:SetText("Condition")
+
+    local condDivider = scrollChild:CreateTexture(nil, "ARTWORK")
+    condDivider:SetHeight(1)
+    condDivider:SetPoint("TOPLEFT", condHeader, "BOTTOMLEFT", 0, -4)
+    condDivider:SetPoint("RIGHT", scrollChild, "RIGHT", -8, 0)
+    condDivider:SetColorTexture(0.3, 0.3, 0.3, 0.8)
+
+    local condArea = CreateFrame("Frame", nil, scrollChild)
+    TrackFrame(condArea)
+    condArea:SetPoint("TOPLEFT", condDivider, "BOTTOMLEFT", 0, -6)
+    condArea:SetPoint("RIGHT", scrollChild, "RIGHT", -4, 0)
+    condArea:SetHeight(400)
+
+    local lastFrame, treeHeight = RenderConditionTree(
+        condArea,
+        rule.condition,
+        0,
+        "root",
+        function(replacement, isDelete)
+            if isDelete then
+                rule.condition = nil
+            elseif replacement then
+                rule.condition = replacement
+            end
+            -- Re-render the editor
+            Rerender()
+        end,
+        nil,
+        0
+    )
+
+    -- Update condition area height
+    condArea:SetHeight(math.max(treeHeight or 30, 30))
+
+    ----------------------------------------------------------------
+    -- Update scroll child height to fit all content
+    ----------------------------------------------------------------
+    -- Rough estimate: header + type dd + spell dd + manual + reason + condition
+    local totalHeight = 24 + 40 + 40 + 26 + 40 + 30 + (treeHeight or 30) + 60
+    scrollChild:SetHeight(math.max(totalHeight, 200))
 end
