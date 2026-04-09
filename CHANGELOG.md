@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.20.0 - 2026-04-09
+
+### Added
+- **Profile Import/Export** (`/ts export`, `/ts import`): Share custom profiles as copy-paste strings
+  - Zero external dependencies (custom serializer + Base64 codec)
+  - 4-phase validation: format, schema, semantic, warnings
+  - Preview before import with validation results
+  - Strict security: no code execution, whitelist-based parsing
+  - Export/Import buttons in the Rule Builder
+  - Profiles are tied to their target spec and only activate on the matching character
+
 ## v0.19.0 - 2026-04-09
 
 ### Added

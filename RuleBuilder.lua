@@ -282,6 +282,28 @@ local function CreateMainFrame()
     end)
     f._addVarBtn = addVarBtn
 
+    local exportBtn = CreateFrame("Button", nil, bottomBar, "UIPanelButtonTemplate")
+    exportBtn:SetSize(70, 22)
+    exportBtn:SetPoint("RIGHT", resetBtn, "LEFT", -6, 0)
+    exportBtn:SetText("Export")
+    exportBtn:SetScript("OnClick", function()
+        if TrueShot.ProfileIO and TrueShot.ProfileIO.ShowExport then
+            TrueShot.ProfileIO:ShowExport()
+        end
+    end)
+    f._exportBtn = exportBtn
+
+    local importBtn = CreateFrame("Button", nil, bottomBar, "UIPanelButtonTemplate")
+    importBtn:SetSize(70, 22)
+    importBtn:SetPoint("RIGHT", exportBtn, "LEFT", -6, 0)
+    importBtn:SetText("Import")
+    importBtn:SetScript("OnClick", function()
+        if TrueShot.ProfileIO and TrueShot.ProfileIO.ShowImport then
+            TrueShot.ProfileIO:ShowImport()
+        end
+    end)
+    f._importBtn = importBtn
+
     f:Hide()
     return f
 end
@@ -632,6 +654,8 @@ function RuleBuilder:UpdateButtonStates()
     _mainFrame._resetBtn:SetShown(_isCustomized)
     _mainFrame._addRuleBtn:SetShown(_isCustomized)
     _mainFrame._addVarBtn:SetShown(_isCustomized)
+    if _mainFrame._exportBtn then _mainFrame._exportBtn:SetShown(_isCustomized) end
+    if _mainFrame._importBtn then _mainFrame._importBtn:Show() end
 end
 
 ------------------------------------------------------------------------

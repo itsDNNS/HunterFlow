@@ -333,6 +333,20 @@ SlashCmdList["TRUESHOT"] = function(msg)
             print("|cff00ff00[TS]|r Scorecard not loaded.")
         end
 
+    elseif msg == "export" then
+        if TrueShot.ProfileIO and TrueShot.ProfileIO.ShowExport then
+            TrueShot.ProfileIO:ShowExport()
+        else
+            print("|cffff0000[TS]|r ProfileIO not loaded.")
+        end
+
+    elseif msg == "import" then
+        if TrueShot.ProfileIO and TrueShot.ProfileIO.ShowImport then
+            TrueShot.ProfileIO:ShowImport()
+        else
+            print("|cffff0000[TS]|r ProfileIO not loaded.")
+        end
+
     elseif msg == "rules" then
         if TrueShot.RuleBuilder and TrueShot.RuleBuilder.Toggle then
             TrueShot.RuleBuilder:Toggle()
@@ -351,6 +365,8 @@ SlashCmdList["TRUESHOT"] = function(msg)
         print("  /ts debug   - Print queue and profile state")
         print("  /ts score   - Show recent alignment scores")
         print("  /ts rules   - Open the Visual Rule Builder")
+        print("  /ts export  - Export custom profile as shareable string")
+        print("  /ts import  - Import a profile from a shared string")
         print("  /ts diagnostics on|off - Enable or disable probe diagnostics")
         print("  /ts probe   - Signal validation probes (only when diagnostics are enabled)")
 

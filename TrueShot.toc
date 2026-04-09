@@ -38,4 +38,5 @@ SignalProbe.lua
 CombatTrace.lua
 Scorecard.lua
 CustomProfile.lua
+ProfileIO.lua
 RuleBuilder.lua
