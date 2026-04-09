@@ -1433,66 +1433,76 @@ local function RefreshBrowser()
                     if not specCollapsed then
                         local heroes = SortedKeys(specData)
                         for _, heroName in ipairs(heroes) do
-                            local profiles = specData[heroName]
-                            for _, profile in ipairs(profiles) do
-                                rowIndex = rowIndex + 1
-                                if rowIndex > MAX_ROWS then break end
-                                local profileRow = rowPool[rowIndex]
-                                profileRow:ClearAllPoints()
-                                profileRow:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 16, -1)
+                            local heroKey = "hero:" .. className .. "." .. specName .. "." .. heroName
+                            local heroCollapsed = _collapsed[heroKey]
 
-                                local name = profile.displayName or heroName
-                                local isActive = (profile.id == activeBaseId)
-                                local hasCustom = CustomProfile.HasCustomData(profile.id)
-                                local suffix = ""
-                                if isActive and hasCustom then
-                                    suffix = "  |cff00ff00(active, customized)|r"
-                                elseif isActive then
-                                    suffix = "  |cff00ff00(active)|r"
-                                elseif hasCustom then
-                                    suffix = "  |cffaaaaaa(customized)|r"
-                                end
+                            -- Hero talent header row
+                            rowIndex = rowIndex + 1
+                            if rowIndex > MAX_ROWS then break end
+                            local heroRow = rowPool[rowIndex]
+                            heroRow:ClearAllPoints()
+                            heroRow:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 16, -1)
+                            local heroArrow = heroCollapsed and "|cffaaaaaa>|r " or "|cffaaaaaav|r "
+                            heroRow._text:SetText(heroArrow .. "|cffbbbbbb" .. heroName .. "|r")
+                            heroRow._text:SetFontObject(GameFontHighlightSmall)
+                            heroRow:SetScript("OnClick", function()
+                                ToggleCollapse(heroKey)
+                                RefreshBrowser()
+                            end)
+                            heroRow:Show()
+                            lastRow = heroRow
 
-                                local libCount = CustomProfile.GetLibraryCount(profile.id)
-                                if libCount > 1 then
-                                    suffix = suffix .. "  |cff888888[" .. libCount .. " variants]|r"
-                                end
+                            if not heroCollapsed then
+                                local profiles = specData[heroName]
+                                for _, profile in ipairs(profiles) do
+                                    rowIndex = rowIndex + 1
+                                    if rowIndex > MAX_ROWS then break end
+                                    local profileRow = rowPool[rowIndex]
+                                    profileRow:ClearAllPoints()
+                                    profileRow:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 16, -1)
 
-                                profileRow._text:SetText("|cffffffff" .. name .. "|r" .. suffix)
-                                profileRow._text:SetFontObject(isActive and GameFontGreen or GameFontHighlightSmall)
+                                    local name = profile.displayName or heroName
+                                    local isActive = (profile.id == activeBaseId)
+                                    local hasCustom = CustomProfile.HasCustomData(profile.id)
+                                    local suffix = ""
+                                    if isActive and hasCustom then
+                                        suffix = "  |cff00ff00(active, customized)|r"
+                                    elseif isActive then
+                                        suffix = "  |cff00ff00(active)|r"
+                                    elseif hasCustom then
+                                        suffix = "  |cffaaaaaa(customized)|r"
+                                    end
 
-                                -- View button: opens Rule Builder for this profile
-                                profileRow._viewBtn:Show()
-                                profileRow._viewBtn:SetScript("OnClick", function()
-                                    if profile.specID == currentSpecID then
-                                        -- Same spec: activate and open Rule Builder
-                                        TrueShot.Engine:ActivateProfile(profile.specID)
-                                        if TrueShot.RuleBuilder and TrueShot.RuleBuilder.Open then
-                                            TrueShot.RuleBuilder:Open()
-                                        end
-                                    else
-                                        -- Different spec: open read-only Rule Builder view
+                                    local libCount = CustomProfile.GetLibraryCount(profile.id)
+                                    if libCount > 1 then
+                                        suffix = suffix .. "  |cff888888[" .. libCount .. " variants]|r"
+                                    end
+
+                                    profileRow._text:SetText("|cffffffff" .. name .. "|r" .. suffix)
+                                    profileRow._text:SetFontObject(isActive and GameFontGreen or GameFontHighlightSmall)
+
+                                    -- View button: always opens read-only Rule Builder view
+                                    profileRow._viewBtn:Show()
+                                    profileRow._viewBtn:SetScript("OnClick", function()
                                         if TrueShot.RuleBuilder and TrueShot.RuleBuilder.OpenReadOnly then
                                             TrueShot.RuleBuilder:OpenReadOnly(profile)
-                                        else
-                                            print("|cffffff00[TS]|r Cannot view profiles from other specs in Rule Builder.")
                                         end
-                                    end
-                                    _browserFrame:Hide()
-                                end)
-
-                                -- Export button: show export string if customized
-                                if hasCustom then
-                                    profileRow._exportBtn:Show()
-                                    profileRow._exportBtn:SetScript("OnClick", function()
-                                        ProfileIO:ShowExportFor(profile)
                                         _browserFrame:Hide()
                                     end)
-                                end
 
-                                profileRow:SetScript("OnClick", nil) -- no toggle on leaf rows
-                                profileRow:Show()
-                                lastRow = profileRow
+                                    -- Export button: show export string if customized
+                                    if hasCustom then
+                                        profileRow._exportBtn:Show()
+                                        profileRow._exportBtn:SetScript("OnClick", function()
+                                            ProfileIO:ShowExportFor(profile)
+                                            _browserFrame:Hide()
+                                        end)
+                                    end
+
+                                    profileRow:SetScript("OnClick", nil) -- no toggle on leaf rows
+                                    profileRow:Show()
+                                    lastRow = profileRow
+                                end
                             end
                         end
                     end

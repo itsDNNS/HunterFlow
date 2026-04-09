@@ -64,6 +64,7 @@ local _selectedIndex = nil
 local _selectedVarIndex = nil  -- index into stateVarDefs, or nil
 local _editingData = nil  -- the custom data being edited
 local _isCustomized = false
+local _isReadOnly = false
 local _editorFrames = {}  -- tracked frames for editor cleanup
 local RenderConditionTree  -- forward declaration for recursive rendering
 
@@ -662,6 +663,7 @@ function RuleBuilder:Open()
 
     -- Update title
     _mainFrame._profileLabel:SetText("|cffaaaaaa" .. (baseProfile.displayName or profileId) .. "|r")
+    _isReadOnly = false
 
     -- Load existing custom data or show built-in rules read-only
     local customData = CustomProfile.GetCustomData(profileId)
@@ -746,6 +748,7 @@ function RuleBuilder:OpenReadOnly(profile)
         rotationalSpells = profile.rotationalSpells or {},
     }
     _isCustomized = false
+    _isReadOnly = true
 
     _selectedIndex = nil
     _selectedVarIndex = nil
@@ -767,6 +770,17 @@ end
 
 function RuleBuilder:UpdateButtonStates()
     if not _mainFrame then return end
+    if _isReadOnly then
+        _mainFrame._customizeBtn:Hide()
+        _mainFrame._applyBtn:Hide()
+        _mainFrame._resetBtn:Hide()
+        _mainFrame._addRuleBtn:Hide()
+        _mainFrame._addVarBtn:Hide()
+        if _mainFrame._exportBtn then _mainFrame._exportBtn:Hide() end
+        if _mainFrame._importBtn then _mainFrame._importBtn:Hide() end
+        if _mainFrame._browseBtn then _mainFrame._browseBtn:Hide() end
+        return
+    end
     _mainFrame._customizeBtn:SetShown(not _isCustomized)
     _mainFrame._applyBtn:SetShown(_isCustomized)
     _mainFrame._resetBtn:SetShown(_isCustomized)
@@ -774,6 +788,7 @@ function RuleBuilder:UpdateButtonStates()
     _mainFrame._addVarBtn:SetShown(_isCustomized)
     if _mainFrame._exportBtn then _mainFrame._exportBtn:SetShown(_isCustomized) end
     if _mainFrame._importBtn then _mainFrame._importBtn:Show() end
+    if _mainFrame._browseBtn then _mainFrame._browseBtn:Show() end
 end
 
 ------------------------------------------------------------------------
