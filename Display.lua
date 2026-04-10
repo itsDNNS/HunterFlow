@@ -468,11 +468,15 @@ local function FormatKeybindForDisplay(key)
     key = key:gsub("TAB", "Tab")
     key = key:gsub("CAPSLOCK", "CpLk")
     key = key:gsub("NUMLOCK", "NmLk")
-    -- Arrows
-    key = key:gsub("UP", "Up")
-    key = key:gsub("DOWN", "Dn")
-    key = key:gsub("LEFT", "Lt")
-    key = key:gsub("RIGHT", "Rt")
+    -- Arrows (anchored to avoid mangling gamepad PADD* tokens)
+    key = key:gsub("^UP$", "Up")
+    key = key:gsub("%-UP$", "-Up")
+    key = key:gsub("^DOWN$", "Dn")
+    key = key:gsub("%-DOWN$", "-Dn")
+    key = key:gsub("^LEFT$", "Lt")
+    key = key:gsub("%-LEFT$", "-Lt")
+    key = key:gsub("^RIGHT$", "Rt")
+    key = key:gsub("%-RIGHT$", "-Rt")
     return key
 end
 
