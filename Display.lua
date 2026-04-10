@@ -465,8 +465,14 @@ local function FormatKeybindForDisplay(key)
     key = key:gsub("ESCAPE", "Esc")
     key = key:gsub("SPACE", "Sp")
     key = key:gsub("ENTER", "Ent")
+    key = key:gsub("TAB", "Tab")
     key = key:gsub("CAPSLOCK", "CpLk")
     key = key:gsub("NUMLOCK", "NmLk")
+    -- Arrows
+    key = key:gsub("UP", "Up")
+    key = key:gsub("DOWN", "Dn")
+    key = key:gsub("LEFT", "Lt")
+    key = key:gsub("RIGHT", "Rt")
     return key
 end
 
