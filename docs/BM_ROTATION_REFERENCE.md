@@ -62,9 +62,8 @@ Same as ST but add **Wild Thrash every 8 seconds on cooldown**. Wild Thrash:
 ### Bestial Wrath Timing
 
 - 30s CD, 15s duration
-- WCL data: 78%+ of top players press BW immediately, even with BS charges available
-- "If in doubt, don't hold it. Only hold for something blindingly obvious."
-- TrueShot: BW only blacklisted when on CD, NOT gated by BS charges
+- Dump all BS charges before BW. Holding a KC charge to enter BW with 2 is worth it.
+- TrueShot: BW only blacklisted when on CD, NOT gated by BS charges (AC handles BS dump sequencing)
 
 ### TrueShot Profile Rules (BM_PackLeader.lua)
 
@@ -83,10 +82,14 @@ Same as ST but add **Wild Thrash every 8 seconds on cooldown**. Wild Thrash:
 
 | # | Priority | Notes |
 |---|----------|-------|
-| 1 | Kill Command (with Nature's Ally) | Always highest. "KC is more powerful than BA in virtually every circumstance." |
-| 2 | Barbed Shot (if on 2 charges) | Prevent charge cap. Higher prio than BA when capped. |
-| 3 | Black Arrow | Great filler, NOT main ability. Available on CD, >80% HP target, or proc. |
-| 4 | Cobra Shot | Last resort filler. |
+| 1 | Trinkets | Stat-granting on-use trinkets right before BW (buffs up-front damage). |
+| 2 | Bestial Wrath | Dump all BS charges before casting. Holding a KC charge to enter BW with 2 is worth it. |
+| 3 | Kill Command (with Nature's Ally) | On CD. "KC is more powerful than BA in virtually every circumstance." |
+| 4 | Black Arrow (in Withering Fire) | During first 10s of BW only. |
+| 5 | Wailing Arrow | When 7s left on BW (~2.5s left on WF). Procs a free BA - follow up with it. |
+| 6 | Barbed Shot | Filler. Keep off 2 charges. |
+| 7 | Black Arrow (outside WF) | Lower prio than BS as filler. |
+| 8 | Cobra Shot | Last resort filler. |
 
 "The main thing that can catch you out is trying to over-prioritize Black Arrow."
 
@@ -94,44 +97,57 @@ Same as ST but add **Wild Thrash every 8 seconds on cooldown**. Wild Thrash:
 
 During Withering Fire:
 1. Black Arrow is highest DPS priority (procs from BW activation)
-2. Wailing Arrow near end of WF window (~7s left on BW = ~3s WF remaining)
+2. Wailing Arrow when WF is less than 2.5s from ending (~7s left on BW)
 3. WA procs a free Black Arrow -- use it immediately
-4. "Think of Wailing Arrow as a Black Arrow replacement" when BA not available
 
 ### Single-Target Opener
 
-1. Puzzle Box (~2s pre-pull)
-2. Barbed Shot x2
-3. Bestial Wrath
-4. Kill Command
-5. Black Arrow
+1. Hunter's Mark active on target
+2. Puzzle Box (~2s pre-pull)
+3. Barbed Shot
+4. Potion, Racials, etc.
+5. Bestial Wrath
 6. Kill Command
-7. Barbed Shot
-8. Continue rotation. WA within WF window.
+7. Black Arrow
+8. Kill Command
+9. Continue rotation. WA when 7s left on BW.
 
 ### AoE Rotation
 
-Same core rotation as ST, plus:
-- **Wild Thrash every 8 seconds on CD** (for damage, not just Beast Cleave)
-- Black Arrow also gives Beast Cleave (DR exclusive)
-- Wild Thrash damage is the primary reason to use it; Beast Cleave is secondary for DR
-
-**DR AoE priority: Wild Thrash on CD > KC with Nature's Ally > BA (if BS not on 2 charges) > BS on 2 charges > Cobra**
+| # | Priority | Notes |
+|---|----------|-------|
+| 1 | Black Arrow | If Beast Cleave is expiring. BA gives Beast Cleave (DR exclusive). |
+| 2 | Bestial Wrath | Ensure Beast Cleave is up first. |
+| 3 | Wild Thrash | On cooldown. Primary AoE damage + Beast Cleave. |
+| 4 | Kill Command (with Nature's Ally) | On CD. Banking a charge for BW is a minor DPS increase. |
+| 5 | Black Arrow (in Withering Fire) | During first 10s of BW. |
+| 6 | Barbed Shot (if on 2 charges) | Prevent charge cap. |
+| 7 | Wailing Arrow | When WF less than 2.5s from ending, follow up with BA. |
+| 8 | Barbed Shot | On CD. |
+| 9 | Wailing Arrow | Outside WF. |
+| 10 | Black Arrow | Outside WF. |
+| 11 | Cobra Shot | Filler. |
 
 ### AoE Opener (Dark Ranger specific!)
 
 Different from Pack Leader because Black Arrow provides initial Beast Cleave:
-1. Puzzle Box (if possible)
-2. **Black Arrow** (gives Beast Cleave first!)
-3. Barbed Shot
-4. Bestial Wrath (Beast Cleave already active from BA)
-5. Wild Thrash (buffed by BW)
-6. Kill Command
-7. Continue rotation
+1. Hunter's Mark active on target
+2. Puzzle Box (if possible, often skipped in M+ pulls)
+3. **Black Arrow** (gives Beast Cleave first!)
+4. Barbed Shot
+5. (If tank still gathering pull, coast with baseline rotation until stacked)
+6. Potion, Racials, etc.
+7. Wild Thrash (if Beast Cleave needed, otherwise after BW)
+8. Bestial Wrath
+9. Kill Command
+10. Barbed Shot
+11. Kill Command
+12. Black Arrow
+13. Continue rotation. WA when no more BS or KC available.
 
 ### Bestial Wrath Timing
 
-Same as Pack Leader: press immediately, don't hold.
+Dump all BS charges before BW. Holding a KC charge to enter BW with 2 is worth it.
 
 ### TrueShot Profile Rules (BM_DarkRanger.lua)
 
@@ -140,7 +156,7 @@ Same as Pack Leader: press immediately, don't hold.
 | Call Pet / Revive Pet / Counter Shot | BLACKLIST | always | Utility, never rotation |
 | BW on CD | BLACKLIST_CONDITIONAL | bw_on_cd | Suppress when on CD |
 | BA during Withering Fire | PIN | ba_ready AND in_wf | Highest DPS during burst |
-| WA near end of WF | PREFER | wa_available AND wf_ending(3s) | Sneak extra BA proc into window |
+| WA near end of WF | PREFER | wa_available AND wf_ending(2.5s) | Sneak extra BA proc into window |
 | BA outside WF | PREFER | ba_ready AND NOT in_wf | Filler priority over Cobra |
 | Wild Thrash AoE | AoE Hint | in_combat AND target_count >= 2 AND NOT wt_on_cd | On CD in multi-target |
 | KC anti-repeat | BLACKLIST_CONDITIONAL | last_cast_was_kc | Nature's Ally enforcement |
@@ -152,7 +168,7 @@ Same as Pack Leader: press immediately, don't hold.
 | Element | Reason |
 |---------|--------|
 | Beast Cleave uptime | Buff tracking is secret. Wild Thrash on CD provides 100% uptime. |
-| Focus management | Focus is secret (validated: ShouldUnitPowerBeSecret = true). Leave 40 focus for WT in AoE is not enforceable. |
+| Focus management | UnitPower("player", 2) is readable (validated 2026-04-10). Resource condition type available in Engine for Focus pooling. |
 | Opener sequence | AC handles initial spells, profile rules take over after first cast events. |
 | Black Arrow availability (>80% HP / proc) | Proc state is secret. AC handles BA availability. |
 | Trinket usage | External to rotation logic. |
@@ -168,7 +184,7 @@ Based on 40 raid parses (4 bosses) + 157 M+ parses (8 dungeons):
 
 - KC: 16-18 CPM, avg 3.4s gap (on CD)
 - Nature's Ally compliance: 94-99% (even top players occasionally break it)
-- BW: 78%+ pressed immediately without BS dump (charge-dump rule was wrong)
+- BW: Guide now recommends dumping BS charges before BW (updated from earlier WCL findings)
 - Wild Thrash M+: 3.58 CPM avg, 79% on CD rate, 100% of runs use it
 - Wild Thrash Raid: Boss-dependent (0 on pure ST, 2.6 on AoE)
-- BS before BW: Only 18-24% of BW casts had prior BS dump
+- BS before BW: Guide says dump charges; earlier WCL showed 18-24% compliance (meta may have shifted)

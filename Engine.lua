@@ -135,6 +135,18 @@ function Engine:EvalCondition(cond)
         if cond.op == ">" then return count > cond.value end
         return false
 
+    elseif cond.type == "resource" then
+        local powerType = cond.powerType or 0
+        local ok, current = pcall(UnitPower, "player", powerType)
+        if ok and not IsSecret(current) then
+            if cond.op == ">=" then return current >= cond.value end
+            if cond.op == ">"  then return current >  cond.value end
+            if cond.op == "==" then return current == cond.value end
+            if cond.op == "<"  then return current <  cond.value end
+            if cond.op == "<=" then return current <= cond.value end
+        end
+        return false
+
     elseif cond.type == "spell_charges" then
         if C_Spell and C_Spell.GetSpellCharges then
             local ok, info = pcall(C_Spell.GetSpellCharges, cond.spellID)

@@ -28,7 +28,7 @@ local Profile = {
         [34026]   = true, -- Kill Command
         [19574]   = true, -- Bestial Wrath
         [1264359] = true, -- Wild Thrash
-        [56641]   = true, -- Steady Shot
+        [56641]   = true, -- Cobra Shot
         [217200]  = true, -- Barbed Shot
         [120360]  = true, -- Barrage
         [53351]   = true, -- Kill Shot
@@ -54,8 +54,8 @@ local Profile = {
         { type = "BLACKLIST", spellID = 982 },    -- Revive Pet
         { type = "BLACKLIST", spellID = 147362 }, -- Counter Shot (user preference)
 
-        -- Bestial Wrath: suppress only when on CD (WCL data: top players press BW
-        -- immediately, even with BS charges available -- 26-55% of BW casts had charges)
+        -- Bestial Wrath: suppress only when on CD
+        -- Guide: dump BS charges before BW, hold a KC charge to enter with 2
         {
             type = "BLACKLIST_CONDITIONAL",
             spellID = 19574,
@@ -80,6 +80,20 @@ local Profile = {
             type = "BLACKLIST_CONDITIONAL",
             spellID = 34026,
             condition = { type = "last_cast_was_kc" },
+        },
+
+        -- Focus pooling: suppress Cobra Shot when Focus is too low for KC after,
+        -- but only when KC is actually castable (avoids blank icons when KC is
+        -- also blocked by Nature's Ally or on CD)
+        {
+            type = "BLACKLIST_CONDITIONAL",
+            spellID = 56641, -- Cobra Shot
+            reason = "Focus Pool",
+            condition = {
+                type = "and",
+                left  = { type = "resource", powerType = 2, op = "<", value = 65 },
+                right = { type = "usable", spellID = 34026 }, -- KC is castable
+            },
         },
     },
 }

@@ -439,7 +439,7 @@ local RESERVED_CONDITION_NAMES = {
 local ENGINE_CONDITION_IDS = {
     spell_glowing = true, target_count = true, spell_charges = true,
     usable = true, target_casting = true, in_combat = true,
-    burst_mode = true, combat_opening = true,
+    burst_mode = true, combat_opening = true, resource = true,
 }
 
 -- Validate array: contiguous 1-based numeric keys, no mixed string keys

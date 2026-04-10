@@ -67,6 +67,12 @@ CustomProfile.RegisterConditionSchema("_engine", {
     { id = "burst_mode",      label = "Burst Mode Active",     params = {} },
     { id = "combat_opening",  label = "Combat Opening",
       params = { { field = "duration", fieldType = "number", default = 2, label = "Seconds" } } },
+    { id = "resource",        label = "Resource Check",
+      params = {
+          { field = "powerType", fieldType = "number", default = 0, label = "Power Type (0=Mana, 2=Focus, 3=Energy)" },
+          { field = "op",        fieldType = "operator", choices = {">=", ">", "==", "<", "<="}, default = ">=" },
+          { field = "value",     fieldType = "number", default = 50, label = "Amount" },
+      }},
 })
 
 ------------------------------------------------------------------------
