@@ -100,6 +100,54 @@ function Engine:IsSpellGlowing(spellID)
 end
 
 ------------------------------------------------------------------------
+-- Assisted Combat suggestion cache
+------------------------------------------------------------------------
+
+local _acSuggestionTick = 0
+local _acPrimarySpell = nil
+local _acSuggestedSpells = {}
+
+local function RefreshACSuggestions()
+    local now = GetTime()
+    if _acSuggestionTick == now then return end
+
+    _acSuggestionTick = now
+    _acPrimarySpell = nil
+    wipe(_acSuggestedSpells)
+
+    if not C_AssistedCombat or not C_AssistedCombat.IsAvailable() then
+        return
+    end
+
+    local baseSpell = C_AssistedCombat.GetNextCastSpell()
+    if baseSpell and not IsSecret(baseSpell) then
+        _acPrimarySpell = baseSpell
+        _acSuggestedSpells[baseSpell] = true
+    end
+
+    local rotSpells = C_AssistedCombat.GetRotationSpells()
+    if not rotSpells or IsSecret(rotSpells) then
+        return
+    end
+
+    for _, entry in ipairs(rotSpells) do
+        local spellID = entry
+        if type(entry) == "table" then
+            spellID = entry.spellID or entry[1]
+        end
+        if spellID and not IsSecret(spellID) then
+            _acSuggestedSpells[spellID] = true
+        end
+    end
+end
+
+function Engine:IsSpellSuggestedByAC(spellID)
+    if not spellID then return false end
+    RefreshACSuggestions()
+    return _acSuggestedSpells[spellID] == true
+end
+
+------------------------------------------------------------------------
 -- Condition evaluator (generic conditions only)
 ------------------------------------------------------------------------
 
@@ -128,6 +176,9 @@ function Engine:EvalCondition(cond)
 
     elseif cond.type == "spell_glowing" then
         return self:IsSpellGlowing(cond.spellID)
+
+    elseif cond.type == "ac_suggested" then
+        return self:IsSpellSuggestedByAC(cond.spellID)
 
     elseif cond.type == "target_count" then
         local count = GetHostileCount()
@@ -249,7 +300,8 @@ function Engine:ComputeQueue(iconCount)
         return queue
     end
 
-    local baseSpell = C_AssistedCombat.GetNextCastSpell()
+    RefreshACSuggestions()
+    local baseSpell = _acPrimarySpell
 
     -- Build conditional blacklist for this frame
     wipe(_condBlacklist)

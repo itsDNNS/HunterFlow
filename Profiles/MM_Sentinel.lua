@@ -86,7 +86,7 @@ local Profile = {
             reason = "Post-RF Window",
             condition = {
                 type = "and",
-                left  = { type = "trueshot_ready" },
+                left  = { type = "ac_suggested", spellID = SPELLS.Trueshot },
                 right = {
                     type = "and",
                     left  = { type = "rapid_fire_recent", seconds = 3 },
@@ -109,7 +109,7 @@ local Profile = {
             reason = "Chakram",
             condition = {
                 type = "and",
-                left  = { type = "chakram_ready" },
+                left  = { type = "ac_suggested", spellID = SPELLS.MoonlightChakram },
                 right = {
                     type = "and",
                     left  = { type = "trueshot_active" },
@@ -159,14 +159,7 @@ function Profile:EvalCondition(cond)
     local s = self.state
     local now = GetTime()
 
-    if cond.type == "trueshot_ready" then
-        if C_Spell and C_Spell.IsSpellUsable then
-            local ok, usable = pcall(C_Spell.IsSpellUsable, SPELLS.Trueshot)
-            if ok then return usable end
-        end
-        return false
-
-    elseif cond.type == "trueshot_just_cast" then
+    if cond.type == "trueshot_just_cast" then
         local threshold = cond.seconds or 2
         return s.lastTrueshotCast > 0 and (now - s.lastTrueshotCast) <= threshold
 
@@ -180,13 +173,6 @@ function Profile:EvalCondition(cond)
     elseif cond.type == "volley_recent" then
         local threshold = cond.seconds or 2
         return s.lastVolleyCast > 0 and (now - s.lastVolleyCast) <= threshold
-
-    elseif cond.type == "chakram_ready" then
-        if C_Spell and C_Spell.IsSpellUsable then
-            local ok, usable = pcall(C_Spell.IsSpellUsable, SPELLS.MoonlightChakram)
-            if ok then return usable end
-        end
-        return false
 
     elseif cond.type == "aimed_shot_ready" then
         if C_Spell and C_Spell.GetSpellCharges then
@@ -244,7 +230,6 @@ Engine:RegisterProfile(Profile)
 
 if TrueShot.CustomProfile then
     TrueShot.CustomProfile.RegisterConditionSchema("Hunter.MM.Sentinel", {
-        { id = "trueshot_ready",    label = "Trueshot Ready",    params = {} },
         { id = "trueshot_just_cast", label = "Trueshot Just Cast",
           params = { { field = "seconds", fieldType = "number", default = 2, label = "Seconds window" } } },
         { id = "trueshot_active",   label = "Trueshot Active",   params = {} },
@@ -252,7 +237,6 @@ if TrueShot.CustomProfile then
           params = { { field = "seconds", fieldType = "number", default = 3, label = "Seconds window" } } },
         { id = "volley_recent",     label = "Volley Recent",
           params = { { field = "seconds", fieldType = "number", default = 2, label = "Seconds window" } } },
-        { id = "chakram_ready",     label = "Moonlight Chakram Ready", params = {} },
         { id = "aimed_shot_ready",  label = "Aimed Shot Ready",  params = {} },
     })
 end

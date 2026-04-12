@@ -164,7 +164,7 @@ function Profile:GetDebugLines()
     local bwElapsed = s.lastBWCast > 0 and (GetTime() - s.lastBWCast) or 0
     return {
         "  BW CD: " .. (s.lastBWCast > 0
-            and string.format("%.1fs elapsed (est ~%ds)", bwElapsed, 60)
+            and string.format("%.1fs elapsed (est ~%ds)", bwElapsed, BW_COOLDOWN)
             or "not cast yet"),
         "  Last cast was KC: " .. tostring(s.lastCastWasKC),
     }

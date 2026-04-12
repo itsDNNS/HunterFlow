@@ -123,7 +123,7 @@ local Profile = {
             reason = "Post-RF Window",
             condition = {
                 type = "and",
-                left  = { type = "trueshot_ready" },
+                left  = { type = "ac_suggested", spellID = SPELLS.Trueshot },
                 right = {
                     type = "and",
                     left  = { type = "rapid_fire_recent", seconds = 3 },
@@ -223,13 +223,6 @@ function Profile:EvalCondition(cond)
     elseif cond.type == "wa_available" then
         return s.wailingArrowAvailable
 
-    elseif cond.type == "trueshot_ready" then
-        if C_Spell and C_Spell.IsSpellUsable then
-            local ok, usable = pcall(C_Spell.IsSpellUsable, SPELLS.Trueshot)
-            if ok then return usable end
-        end
-        return false
-
     elseif cond.type == "trueshot_just_cast" then
         local threshold = cond.seconds or 2
         return s.lastTrueshotCast > 0 and (now - s.lastTrueshotCast) <= threshold
@@ -299,7 +292,6 @@ if TrueShot.CustomProfile then
         { id = "ba_ready",          label = "Black Arrow Ready",       params = {} },
         { id = "in_withering_fire", label = "In Withering Fire",       params = {} },
         { id = "wa_available",      label = "Wailing Arrow Available", params = {} },
-        { id = "trueshot_ready",    label = "Trueshot Ready",          params = {} },
         { id = "trueshot_just_cast", label = "Trueshot Just Cast",
           params = { { field = "seconds", fieldType = "number", default = 2, label = "Seconds window" } } },
         { id = "trueshot_active",   label = "Trueshot Active",         params = {} },

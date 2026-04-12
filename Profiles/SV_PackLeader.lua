@@ -17,15 +17,10 @@ local SPELLS = {
     Takedown       = 1250646,
     Boomstick      = 1261193,
     FlamefangPitch = 1251592,
-    RaptorStrike   = 186270,
     Harpoon        = 190925,
-    HatchetToss    = 259489,
     CallPet1       = 883,
     RevivePet      = 982,
 }
-
--- Melee range probe spells (if any returns in_range=true, player is in melee)
-local MELEE_PROBE_SPELLS = { SPELLS.RaptorStrike }
 
 ------------------------------------------------------------------------
 -- Profile definition
@@ -60,13 +55,6 @@ local Profile = {
         { type = "BLACKLIST", spellID = SPELLS.Harpoon },
         { type = "BLACKLIST", spellID = SPELLS.CallPet1 },
         { type = "BLACKLIST", spellID = SPELLS.RevivePet },
-
-        -- Hatchet Toss: suppress when in melee range
-        {
-            type = "BLACKLIST_CONDITIONAL",
-            spellID = SPELLS.HatchetToss,
-            condition = { type = "in_melee_range" },
-        },
 
         -- Stampede: first KC after Takedown triggers Stampede
         {
@@ -105,7 +93,7 @@ local Profile = {
             type = "PREFER",
             spellID = SPELLS.FlamefangPitch,
             reason = "Flamefang",
-            condition = { type = "flamefang_ready" },
+            condition = { type = "ac_suggested", spellID = SPELLS.FlamefangPitch },
         },
     },
 }
@@ -169,16 +157,6 @@ function Profile:EvalCondition(cond)
         if s.lastBoomstickCast == 0 then return false end
         return (now - s.lastBoomstickCast) < BOOMSTICK_COOLDOWN
 
-    elseif cond.type == "in_melee_range" then
-        -- Check if any melee probe spell is in range; fallback: false (don't suppress)
-        if not C_Spell or not C_Spell.IsSpellInRange then return false end
-        if not UnitExists("target") then return false end
-        for _, probeID in ipairs(MELEE_PROBE_SPELLS) do
-            local ok, inRange = pcall(C_Spell.IsSpellInRange, probeID, "target")
-            if ok and inRange == true then return true end
-        end
-        return false
-
     elseif cond.type == "wfb_charges" then
         if C_Spell and C_Spell.GetSpellCharges then
             local ok, info = pcall(C_Spell.GetSpellCharges, SPELLS.WildfireBomb)
@@ -195,13 +173,6 @@ function Profile:EvalCondition(cond)
                 elseif op == "<"  then return info.currentCharges < val
                 end
             end
-        end
-        return false
-
-    elseif cond.type == "flamefang_ready" then
-        if C_Spell and C_Spell.IsSpellUsable then
-            local ok, usable = pcall(C_Spell.IsSpellUsable, SPELLS.FlamefangPitch)
-            if ok then return usable end
         end
         return false
     end
@@ -260,12 +231,10 @@ if TrueShot.CustomProfile then
         { id = "takedown_active",    label = "Takedown Active",          params = {} },
         { id = "kc_cast_in_takedown", label = "KC Cast In Takedown",     params = {} },
         { id = "boomstick_on_cd",    label = "Boomstick On Cooldown",    params = {} },
-        { id = "in_melee_range",     label = "In Melee Range",           params = {} },
         { id = "wfb_charges",        label = "Wildfire Bomb Charges",
           params = {
               { field = "op",    fieldType = "string", default = "==", label = "Operator" },
               { field = "value", fieldType = "number", default = 2,    label = "Charge count" },
           } },
-        { id = "flamefang_ready",    label = "Flamefang Pitch Ready",    params = {} },
     })
 end

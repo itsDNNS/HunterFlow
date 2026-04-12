@@ -10,9 +10,9 @@ Blizzard's built-in rotation helper gets you started, but it has gaps: wrong AoE
 
 ## Supported Classes
 
-### Hunter (Primary)
+### Hunter (Primary Shipping Target)
 
-TrueShot is built for Hunters. All three specs are fully validated in-game with WCL-backed rotation analysis and detailed cast-event state machines.
+TrueShot is built for Hunters first. Hunter is the class that should deliver clear practical value today, and all three specs are the standard the addon should be judged against.
 
 | Spec | Hero Path | Key Overrides |
 |------|-----------|---------------|
@@ -20,12 +20,14 @@ TrueShot is built for Hunters. All three specs are fully validated in-game with 
 | **Beast Mastery** | Pack Leader | Nature's Ally KC weaving, Wild Thrash AoE hint, Bestial Wrath timing |
 | **Marksmanship** | Dark Ranger | Trueshot opener sequence, Volley/Trueshot anti-overlap, Withering Fire BA priority |
 | **Marksmanship** | Sentinel | Post-Rapid Fire Trueshot gating, Volley anti-overlap, Moonlight Chakram filler timing |
-| **Survival** | Pack Leader | Stampede KC sequencing, Boomstick CD tracking, Takedown burst window, Hatchet Toss melee gating |
-| **Survival** | Sentinel | WFB charge management, Boomstick CD tracking, Moonlight Chakram timing, Hatchet Toss melee gating |
+| **Survival** | Pack Leader | Stampede KC sequencing, Boomstick CD tracking, Takedown burst window, Flamefang timing |
+| **Survival** | Sentinel | WFB charge-cap spend, Boomstick CD tracking, Moonlight Chakram timing, Flamefang timing |
 
-### Demon Hunter, Druid, Mage (Alpha)
+### Demon Hunter, Druid, Mage (Foundation / Alpha)
 
-These classes have profile support with burst window tracking and hero path auto-detection. However, we don't play these classes ourselves and rely on community feedback for validation.
+These classes exist as framework groundwork and early profile lanes. They are useful for proving that the architecture can grow beyond Hunter, but they are not the main product promise yet.
+
+We currently treat them as opportunistic expansion paths: they can improve over time, especially when they become classes we actively play ourselves, but Hunter polish comes first.
 
 **If you play one of these classes and notice something off or want to suggest changes, please [open an issue](https://github.com/itsDNNS/TrueShot/issues).**
 
@@ -35,7 +37,7 @@ These classes have profile support with burst window tracking and hero path auto
 | **Druid** | Feral, Balance | 4 | Tiger's Fury/Berserk and Celestial Alignment burst tracking. Resource-dependent (Energy, Astral Power) limits overrides. |
 | **Mage** | Fire, Frost, Arcane | 6 | Combustion, Frozen Orb, Arcane Surge burst windows. Frost shatter combo (Flurry > Ice Lance). |
 
-All 20 profiles across 4 classes support automatic hero path detection via `IsPlayerSpell` markers.
+All 20 profiles across 4 classes support automatic hero path detection via `IsPlayerSpell` markers, but only Hunter should currently be read as fully productized support.
 
 ## How It Works
 

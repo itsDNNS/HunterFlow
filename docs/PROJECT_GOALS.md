@@ -4,16 +4,31 @@
 
 ## Primary Goal
 
-Build a hunter-focused recommendation framework for Retail `Midnight` that is:
+Build a hunter-first recommendation framework for Retail `Midnight` that is:
 
 - lightweight
 - performant on the live client
 - honest about API limits
-- still functionally useful enough that players can rely on it as a real rotational aid
+- functionally strong enough that Hunter players can rely on it as a real rotational aid
+- reusable enough that additional classes can be added later without re-architecting the addon
 
 In short:
 
-`TrueShot` should aim for the highest practical gameplay value per unit of client overhead.
+`TrueShot` should aim for the highest practical Hunter gameplay value per unit of client overhead, while laying clean groundwork for later class expansion.
+
+## Scope Priority
+
+Current shipping priority is explicit:
+
+1. Hunter should be the first class supported to a genuinely complete, high-value standard.
+2. Other classes may exist as groundwork or personal expansion lanes, but they must not dilute Hunter polish.
+3. New class work should become a real product priority only when there is a practical reason to invest in it, for example because the maintainer actively plays that class.
+
+Today that means:
+
+- Hunter quality is the bar the addon should be judged against
+- multi-class architecture is a feature, but not the current promise
+- future expansion can follow naturally, with `Demon Hunter` as an obvious next candidate if it becomes an active play focus
 
 ## Product Principles
 
@@ -38,7 +53,7 @@ The goal is to stay lightweight **while still delivering the full practical func
 That means `TrueShot` should still try to provide:
 
 - a reliable recommendation queue
-- spec-aware profile behavior where signals are legal and validated
+- spec-aware Hunter behavior where signals are legal and validated
 - configurable, understandable overrides
 - useful debug visibility
 - graceful fallback behavior when a signal is unavailable
@@ -73,6 +88,7 @@ These goals imply a few concrete defaults:
 
 - engine work should bias toward shared, reusable, low-overhead logic
 - profiles should own narrowly scoped, validated rule/state logic
+- Hunter-facing work should outrank speculative breadth across other classes
 - UI should stay compact and cheap instead of becoming a heavyweight configuration surface
 - new features should justify both their gameplay value and their runtime cost
 - probe work and signal validation should happen before adding expensive or speculative behavior

@@ -18,13 +18,9 @@ local SPELLS = {
     MoonlightChakram = 1264902,
     FlamefangPitch   = 1251592,
     Harpoon          = 190925,
-    HatchetToss      = 259489,
-    RaptorStrike     = 186270,
     CallPet1         = 883,
     RevivePet        = 982,
 }
-
-local MELEE_PROBE_SPELLS = { SPELLS.RaptorStrike }
 
 ------------------------------------------------------------------------
 -- Profile definition
@@ -60,19 +56,12 @@ local Profile = {
         { type = "BLACKLIST", spellID = SPELLS.CallPet1 },
         { type = "BLACKLIST", spellID = SPELLS.RevivePet },
 
-        -- Hatchet Toss: suppress when in melee range
-        {
-            type = "BLACKLIST_CONDITIONAL",
-            spellID = SPELLS.HatchetToss,
-            condition = { type = "in_melee_range" },
-        },
-
         -- Prevent capping WFB charges while fishing Sentinel's Mark procs
         {
             type = "PREFER",
             spellID = SPELLS.WildfireBomb,
             reason = "Charge Cap",
-            condition = { type = "wfb_near_cap", seconds = 5 },
+            condition = { type = "spell_charges", spellID = SPELLS.WildfireBomb, op = ">=", value = 2 },
         },
 
         -- Boomstick pinned during Takedown burst (suppress when on CD)
@@ -104,7 +93,7 @@ local Profile = {
             type = "PREFER",
             spellID = SPELLS.FlamefangPitch,
             reason = "Flamefang",
-            condition = { type = "flamefang_ready" },
+            condition = { type = "ac_suggested", spellID = SPELLS.FlamefangPitch },
         },
     },
 }
@@ -156,45 +145,6 @@ function Profile:EvalCondition(cond)
         if s.lastBoomstickCast == 0 then return false end
         return (now - s.lastBoomstickCast) < BOOMSTICK_COOLDOWN
 
-    elseif cond.type == "in_melee_range" then
-        if not C_Spell or not C_Spell.IsSpellInRange then return false end
-        if not UnitExists("target") then return false end
-        for _, probeID in ipairs(MELEE_PROBE_SPELLS) do
-            local ok, inRange = pcall(C_Spell.IsSpellInRange, probeID, "target")
-            if ok and inRange == true then return true end
-        end
-        return false
-
-    elseif cond.type == "wfb_near_cap" then
-        if C_Spell and C_Spell.GetSpellCharges then
-            local ok, info = pcall(C_Spell.GetSpellCharges, SPELLS.WildfireBomb)
-            if ok and info and info.currentCharges then
-                if issecretvalue and issecretvalue(info.currentCharges) then
-                    return false
-                end
-                if info.currentCharges >= 2 then return true end
-                if info.currentCharges == 1 then
-                    local startTime = info.cooldownStartTime
-                    local duration = info.cooldownDuration
-                    if not startTime or not duration then return false end
-                    if issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)) then
-                        return false
-                    end
-                    local threshold = cond.seconds or 5
-                    local timeToRecharge = (startTime + duration) - now
-                    return timeToRecharge <= threshold
-                end
-                return false
-            end
-        end
-        return false
-
-    elseif cond.type == "flamefang_ready" then
-        if C_Spell and C_Spell.IsSpellUsable then
-            local ok, usable = pcall(C_Spell.IsSpellUsable, SPELLS.FlamefangPitch)
-            if ok then return usable end
-        end
-        return false
     end
 
     return nil
@@ -214,12 +164,7 @@ function Profile:GetDebugLines()
         local ok, info = pcall(C_Spell.GetSpellCharges, SPELLS.WildfireBomb)
         if ok and info and info.currentCharges then
             if not (issecretvalue and issecretvalue(info.currentCharges)) then
-                local timeToCap = ""
-                if info.currentCharges < info.maxCharges then
-                    local rechargeIn = (info.cooldownStartTime + info.cooldownDuration) - now
-                    timeToCap = string.format(", %.1fs to next", rechargeIn)
-                end
-                wfbLine = string.format("%d/%d%s", info.currentCharges, info.maxCharges, timeToCap)
+                wfbLine = string.format("%d/%d", info.currentCharges, info.maxCharges)
             end
         end
     end
@@ -256,9 +201,5 @@ if TrueShot.CustomProfile then
           params = { { field = "seconds", fieldType = "number", default = 5, label = "Seconds window" } } },
         { id = "takedown_active",   label = "Takedown Active",           params = {} },
         { id = "boomstick_on_cd",   label = "Boomstick On Cooldown",     params = {} },
-        { id = "in_melee_range",    label = "In Melee Range",            params = {} },
-        { id = "wfb_near_cap",      label = "Wildfire Bomb Near Cap",
-          params = { { field = "seconds", fieldType = "number", default = 5, label = "Seconds to recharge" } } },
-        { id = "flamefang_ready",   label = "Flamefang Pitch Ready",     params = {} },
     })
 end

@@ -112,6 +112,7 @@ These are acceptable:
 
 - "Spell X was cast by the player, so start a local timer."
 - "Spell Y unlocks Spell Z, so mark Z as available until consumed."
+- "Assisted Combat currently surfaces Spell X in its primary or rotation suggestions, so use that as a legal readiness gate for an override."
 - "The target is casting, so interrupt can be surfaced."
 - "Nameplate count is at least N, so prefer an AoE branch."
 

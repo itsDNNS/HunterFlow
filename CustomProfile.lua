@@ -47,6 +47,8 @@ end
 ------------------------------------------------------------------------
 
 CustomProfile.RegisterConditionSchema("_engine", {
+    { id = "ac_suggested",    label = "Assisted Combat Suggests Spell",
+      params = { { field = "spellID", fieldType = "spell", label = "Spell" } } },
     { id = "spell_glowing",   label = "Spell Proc Active",
       params = { { field = "spellID", fieldType = "spell", label = "Spell" } } },
     { id = "target_count",    label = "Target Count",
