@@ -143,21 +143,17 @@ local Profile = {
             },
         },
 
-        -- [src §Sequencing "Rapid Fire into Trueshot"] "Ideal setup follows
-        -- pattern: Rapid Fire -> Trueshot -> Aimed Shot." Pair the RF-recency
-        -- signal with the legal ac_suggested readiness gate for TS.
+        -- [src issue #89] Blizzard AC can omit Trueshot entirely, so the queue
+        -- uses the cast-tracked CD ledger for readiness and keeps the existing
+        -- Volley anti-overlap as the sequencing guardrail.
         {
             type = "PIN",
             spellID = SPELLS.Trueshot,
-            reason = "Post-RF Window",
+            reason = "Trueshot",
             condition = {
                 type = "and",
-                left  = { type = "ac_suggested", spellID = SPELLS.Trueshot },
-                right = {
-                    type = "and",
-                    left  = { type = "rapid_fire_recent", seconds = 3 },
-                    right = { type = "not", inner = { type = "volley_recent", seconds = 2 } },
-                },
+                left  = { type = "cd_ready", spellID = SPELLS.Trueshot },
+                right = { type = "in_combat" },
             },
         },
 

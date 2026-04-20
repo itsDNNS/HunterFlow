@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.25.2 - 2026-04-20
+
+### Fixed
+- **MM Hunter: Trueshot and Moonlight Chakram not surfaced in Queue 1** (reported as [#89](https://github.com/itsDNNS/TrueShot/issues/89)). Blizzard Assisted Combat does not include Trueshot or Moonlight Chakram in its suggestion stream, so the previous `ac_suggested(...)` gate on both spells prevented the MM Dark Ranger and MM Sentinel profiles from ever pinning them. The MM Dark Ranger and MM Sentinel Trueshot PINs now gate on `cd_ready(Trueshot) AND in_combat` using the cast-tracked CD ledger, and the Sentinel Moonlight Chakram PREFER rule gates on the local Trueshot window (`trueshot_active AND NOT aimed_shot_ready`). The existing Volley anti-overlap `BLACKLIST_CONDITIONAL` and the `NOT trueshot_active` Chakram safety net both remain in place; `Engine:IsSpellCastable` enforces the final legality check at queue-build time.
+- **Cooldown ledger survives `/reload` mid-cooldown**. Before this release an addon reload during an in-flight Trueshot cooldown dropped the ledger state, so `cd_ready(Trueshot)` flipped back to true until `C_Spell.IsSpellUsable` happened to block the PIN. `State/CDLedger.lua` now exposes `ReseedFromCooldownAPI`, called from the `PLAYER_ENTERING_WORLD` handler in `Core.lua`, which reads `C_Spell.GetSpellCooldown` for every spell in `CDLedger.spec` and reseeds the remaining cooldown using wall-clock semantics (`remaining = startTime + duration - now`). `modRate` is carried as API metadata only and deliberately does not shorten the ledger lifetime. Secret values and non-numeric fields from the API fall through to an empty ledger rather than guessing.
+
+### Added
+- **`CDLedger.spec[288613]`**: Trueshot is now tracked by the central cooldown ledger with a 120 s baseline (source: Azortharion, Icy Veins MM Hunter Rotation, guide updated 2026-04-09, Patch 12.0.4). `GetSpellBaseCooldown` reads still override the hardcoded baseline when talents modify it.
+
+### Tests
+- New scenarios in `tests/test_cd_ledger.lua`: Trueshot 120 s flat CD, `ReseedFromCooldownAPI` restores an in-flight cooldown after reload, `ReseedFromCooldownAPI` treats `duration` as wall-clock even when `modRate` differs, and secret snapshots are ignored.
+- New scenarios in `tests/test_hunter_profiles.lua`: MM Dark Ranger pins Trueshot even when AC omits it, a local Trueshot cast flips `cd_ready(Trueshot)` to false immediately and stops repinning Trueshot, the Volley anti-overlap guard still blocks a ready Trueshot PIN, MM Sentinel pins Trueshot even when AC omits it, Moonlight Chakram surfaces from the local Sentinel window without AC backing, and Moonlight Chakram stays suppressed outside `trueshot_active`.
+- Full test suite now reports 39 Hunter profile + 25 CD ledger + 12 condition registry + 10 engine hero talent + 8 base64 = 94 passing.
+
 ## v0.25.1 - 2026-04-19
 
 ### Fixed

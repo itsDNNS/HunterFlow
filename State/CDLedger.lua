@@ -35,6 +35,32 @@ local function IsSecret(v)
     return issecretvalue and issecretvalue(v) or false
 end
 
+local function SafeCooldownSnapshot(spellID)
+    if not C_Spell or not C_Spell.GetSpellCooldown then return nil end
+    local ok, cooldown = pcall(C_Spell.GetSpellCooldown, spellID)
+    if not ok or type(cooldown) ~= "table" then return nil end
+
+    local startTime = cooldown.startTime or 0
+    local duration = cooldown.duration or 0
+    local modRate = cooldown.modRate or 1
+
+    if IsSecret(startTime) or IsSecret(duration) or IsSecret(modRate) then
+        return nil
+    end
+    if type(startTime) ~= "number" or type(duration) ~= "number" or type(modRate) ~= "number" then
+        return nil
+    end
+    if startTime <= 0 or duration <= 0 or modRate <= 0 then
+        return nil
+    end
+
+    return {
+        startTime = startTime,
+        duration = duration,
+        modRate = modRate,
+    }
+end
+
 ------------------------------------------------------------------------
 -- Spec (data-driven, one entry per tracked spell)
 --
@@ -51,6 +77,12 @@ CDLedger.spec = {
     -- Rotation, guide updated 2026-04-10, Patch 12.0.4.
     -- URL: https://www.icy-veins.com/wow/beast-mastery-hunter-pve-dps-rotation-cooldowns-abilities
     [19574]   = { base_ms = 30000, haste_scaled = false },
+
+    -- Trueshot (MM): 120s flat baseline. Source: Azortharion, Icy Veins MM
+    -- Hunter Rotation, guide updated 2026-04-09, Patch 12.0.4. Live
+    -- GetSpellBaseCooldown reads still win when talents modify the value.
+    -- URL: https://www.icy-veins.com/wow/marksmanship-hunter-pve-dps-rotation-cooldowns-abilities
+    [288613]  = { base_ms = 120000, haste_scaled = false },
 
     -- Wild Thrash (BM): 8s flat. Source: Azortharion 2026-04-10 (same URL),
     -- "8s CD = 100% Beast Cleave uptime if used on CD" (BM Rotation Reference).
@@ -182,6 +214,27 @@ end
 
 function CDLedger:OnCombatEnd()
     -- no-op by design
+end
+
+function CDLedger:ReseedFromCooldownAPI()
+    local now = GetTime()
+    self.state = {}
+    for spellID in pairs(self.spec) do
+        local snapshot = SafeCooldownSnapshot(spellID)
+        if snapshot then
+            -- C_Spell.GetSpellCooldown duration is treated as wall-clock time;
+            -- modRate is carried for UI animation but does not shorten the
+            -- actual cooldown lifetime we need to reseed here.
+            local elapsed = now - snapshot.startTime
+            local remaining = (snapshot.startTime + snapshot.duration) - now
+            if remaining > 0 then
+                self.state[spellID] = {
+                    cast_time = now - elapsed,
+                    expected_ready = now + remaining,
+                }
+            end
+        end
+    end
 end
 
 ------------------------------------------------------------------------

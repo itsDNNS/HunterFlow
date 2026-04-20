@@ -40,6 +40,7 @@ _G.UnitSpellHaste = function(_) return 0 end
 -- Minimal C_Spell stub: treat charges as a plain table keyed by spellID so tests
 -- can drive `spell_charges` conditions deterministically.
 local _charges = {}
+local _spell_usable = {}
 local function set_charges(spellID, current, max)
     _charges[spellID] = { currentCharges = current, maxCharges = max or current }
 end
@@ -72,17 +73,29 @@ _G.UnitPower = function(_unit, _powerType) return 100 end
 _G.UnitExists = function(_) return false end
 _G.UnitCanAttack = function(_, _) return false end
 _G.C_NamePlate = _G.C_NamePlate or { GetNamePlates = function() return {} end }
+local _ac_available = false
+local _ac_next_spell = nil
+local _ac_rotation_spells = {}
+local function set_ac_state(available, next_spell, rotation_spells)
+    _ac_available = available == true
+    _ac_next_spell = next_spell
+    _ac_rotation_spells = rotation_spells or {}
+end
 _G.C_AssistedCombat = _G.C_AssistedCombat or {
-    IsAvailable = function() return false end,
-    GetNextCastSpell = function() return nil end,
-    GetRotationSpells = function() return {} end,
+    IsAvailable = function() return _ac_available end,
+    GetNextCastSpell = function() return _ac_next_spell end,
+    GetRotationSpells = function() return _ac_rotation_spells end,
 }
 _G.C_SpellActivationOverlay = _G.C_SpellActivationOverlay or {
     IsSpellOverlayed = function() return false end,
 }
 _G.UnitCastingInfo = function(_) return nil end
 _G.UnitChannelInfo = function(_) return nil end
-_G.C_Spell.IsSpellUsable = _G.C_Spell.IsSpellUsable or function(_) return true end
+_G.C_Spell.IsSpellUsable = function(spellID)
+    local usable = _spell_usable[spellID]
+    if usable == nil then return true end
+    return usable == true
+end
 
 ------------------------------------------------------------------------
 -- Minimal Engine + CustomProfile stubs that capture registered profiles
@@ -158,7 +171,11 @@ local function test(name, fn)
     end
     set_time(1000.0)
     _charges = {}
+    _spell_usable = {}
     _auras_by_spell = {}
+    _ac_available = false
+    _ac_next_spell = nil
+    _ac_rotation_spells = {}
 
     local ok, err = pcall(fn)
     if ok then
@@ -413,6 +430,50 @@ test("MM DR: Volley anti-overlap signal decays after seconds", function()
     assert_false(p:EvalCondition({ type = "volley_recent", seconds = 2 }))
 end)
 
+test("issue #89 MM DR: ComputeQueue pins Trueshot even when AC omits it", function()
+    local p = P("Hunter.MM.DarkRanger")
+    local Engine = TrueShot.Engine
+    Engine.activeProfile = p
+    Engine:RebuildBlacklist()
+    set_ac_state(true, 185358, { 185358, 56641 })
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], 288613,
+        "Trueshot must pin from cd_ready even when Blizzard AC never suggests it")
+    assert_eq(Engine.lastQueueMeta.source, "pin")
+    assert_eq(Engine.lastQueueMeta.reason, "Trueshot")
+end)
+
+test("issue #89 MM DR: local cast event suppresses Trueshot while cooldown runs", function()
+    local p = P("Hunter.MM.DarkRanger")
+    local Engine = TrueShot.Engine
+    Engine.activeProfile = p
+    Engine:RebuildBlacklist()
+    p:OnSpellCast(288613)
+    set_ac_state(true, 185358, { 185358, 56641 })
+    assert_false(Engine:EvalCondition({ type = "cd_ready", spellID = 288613 }),
+        "After the local cast event, cd_ready(Trueshot) must flip false immediately")
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], 466930,
+        "After Trueshot starts its cooldown, Dark Ranger should fall into the BA opener instead of repinning Trueshot")
+    assert_eq(Engine.lastQueueMeta.reason, "TS Opener BA")
+end)
+
+test("issue #89 MM DR: Volley anti-overlap still blocks a ready Trueshot pin", function()
+    local p = P("Hunter.MM.DarkRanger")
+    local Engine = TrueShot.Engine
+    Engine.activeProfile = p
+    Engine:RebuildBlacklist()
+    p:OnSpellCast(260243)
+    set_ac_state(true, 185358, { 185358, 56641 })
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], 466930,
+        "The existing Volley -> Trueshot guard must still win even with the new cd_ready pin")
+    assert_eq(Engine.lastQueueMeta.reason, "BA Ready")
+end)
+
 ------------------------------------------------------------------------
 -- MM Sentinel
 ------------------------------------------------------------------------
@@ -452,6 +513,51 @@ test("MM Sentinel: aimed_shot_ready reads non-secret charges", function()
     assert_true(p:EvalCondition({ type = "aimed_shot_ready" }))
     set_charges(19434, 0, 2)
     assert_false(p:EvalCondition({ type = "aimed_shot_ready" }))
+end)
+
+test("issue #89 MM Sentinel: ComputeQueue pins Trueshot even when AC omits it", function()
+    local p = P("Hunter.MM.Sentinel")
+    local Engine = TrueShot.Engine
+    Engine.activeProfile = p
+    Engine:RebuildBlacklist()
+    set_ac_state(true, 185358, { 185358, 56641 })
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], 288613,
+        "Sentinel Trueshot must pin from cd_ready even when Blizzard AC omits it")
+    assert_eq(Engine.lastQueueMeta.source, "pin")
+    assert_eq(Engine.lastQueueMeta.reason, "Trueshot")
+end)
+
+test("issue #89 MM Sentinel: Moonlight Chakram can surface without AC suggestion", function()
+    local p = P("Hunter.MM.Sentinel")
+    local Engine = TrueShot.Engine
+    Engine.activeProfile = p
+    Engine:RebuildBlacklist()
+    p:OnSpellCast(288613)
+    set_player_aura(288613, { spellId = 288613 })
+    set_charges(19434, 0, 2)
+    set_ac_state(true, 185358, { 185358, 56641 })
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], 1264902,
+        "Moonlight Chakram should surface from the local Sentinel window even when AC does not suggest it")
+    assert_eq(Engine.lastQueueMeta.source, "prefer")
+    assert_eq(Engine.lastQueueMeta.reason, "Chakram")
+end)
+
+test("issue #89 MM Sentinel: Moonlight Chakram stays suppressed outside trueshot_active", function()
+    local p = P("Hunter.MM.Sentinel")
+    local Engine = TrueShot.Engine
+    Engine.activeProfile = p
+    Engine:RebuildBlacklist()
+    p:OnSpellCast(288613)
+    set_charges(19434, 0, 2)
+    set_ac_state(true, 185358, { 185358, 56641 })
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], 185358,
+        "Without a live Trueshot window, the Chakram safety-net must keep it out of the queue")
 end)
 
 ------------------------------------------------------------------------

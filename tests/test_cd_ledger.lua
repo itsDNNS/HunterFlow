@@ -54,6 +54,12 @@ install_haste_api()
 -- C_Spell stub: only needed for the debug helper that looks up spell names.
 _G.C_Spell = _G.C_Spell or {}
 _G.C_Spell.GetSpellName = function(id) return "Spell#" .. tostring(id) end
+local _cooldown_snapshot = {}
+_G.C_Spell.GetSpellCooldown = function(spellID)
+    local snapshot = _cooldown_snapshot[spellID]
+    if snapshot then return snapshot end
+    return { startTime = 0, duration = 0, isEnabled = true, modRate = 1 }
+end
 
 TrueShot = {}
 
@@ -71,6 +77,7 @@ local function test(name, fn)
     set_time(1000.0)
     _base_cd_override = {}
     _base_cd_returns_secret = false
+    _cooldown_snapshot = {}
     _player_haste = 0
     install_haste_api()
 
@@ -101,8 +108,9 @@ end
 -- Spec coverage
 ------------------------------------------------------------------------
 
-test("Spec covers Bestial Wrath, Wild Thrash, Boomstick", function()
+test("Spec covers Bestial Wrath, Trueshot, Wild Thrash, Boomstick", function()
     assert_true(CDLedger.spec[19574],   "Bestial Wrath (19574) in spec")
+    assert_true(CDLedger.spec[288613],  "Trueshot (288613) in spec")
     assert_true(CDLedger.spec[1264359], "Wild Thrash (1264359) in spec")
     assert_true(CDLedger.spec[1261193], "Boomstick (1261193) in spec")
 end)
@@ -125,6 +133,16 @@ test("Bestial Wrath triggers 30s timer from spec fallback", function()
     assert_near(CDLedger:SecondsUntilReady(19574), 15, 0.01, "after 15s advance")
     advance_time(20)
     assert_false(CDLedger:IsOnCooldown(19574), "should be ready after 35s")
+end)
+
+test("Trueshot triggers 120s timer from spec fallback", function()
+    CDLedger:OnSpellCastSucceeded(288613)
+    assert_true(CDLedger:IsOnCooldown(288613), "Trueshot should be on CD immediately after cast")
+    assert_near(CDLedger:SecondsUntilReady(288613), 120, 0.01, "initial remaining")
+    advance_time(60)
+    assert_near(CDLedger:SecondsUntilReady(288613), 60, 0.01, "after 60s advance")
+    advance_time(61)
+    assert_false(CDLedger:IsOnCooldown(288613), "should be ready after 121s")
 end)
 
 test("Wild Thrash 8s flat CD", function()
@@ -300,6 +318,47 @@ test("OnCombatEnd does NOT reset timers", function()
     assert_true(CDLedger:IsOnCooldown(19574),
         "Cooldowns must persist across PLAYER_REGEN_ENABLED (a BW cast near " ..
         "end of pull is still on CD at the next pull)")
+end)
+
+test("ReseedFromCooldownAPI restores an in-flight Trueshot cooldown after reload", function()
+    _cooldown_snapshot[288613] = {
+        startTime = 940,
+        duration = 120,
+        isEnabled = true,
+        modRate = 1,
+    }
+    CDLedger:ReseedFromCooldownAPI()
+    assert_true(CDLedger:IsOnCooldown(288613),
+        "A live cooldown snapshot should repopulate the ledger after reload")
+    assert_near(CDLedger:SecondsUntilReady(288613), 60, 0.01,
+        "Reload backfill should preserve the remaining cooldown time")
+end)
+
+test("ReseedFromCooldownAPI treats duration as wall-clock even when modRate differs", function()
+    _cooldown_snapshot[288613] = {
+        startTime = 940,
+        duration = 120,
+        isEnabled = true,
+        modRate = 2,
+    }
+    CDLedger:ReseedFromCooldownAPI()
+    assert_near(CDLedger:SecondsUntilReady(288613), 60, 0.01,
+        "modRate must not shorten the wall-clock cooldown used for ledger reseed")
+end)
+
+test("ReseedFromCooldownAPI ignores secret snapshots and keeps the ledger empty", function()
+    local prev = _G.issecretvalue
+    _cooldown_snapshot[288613] = {
+        startTime = "SECRET_START",
+        duration = 120,
+        isEnabled = true,
+        modRate = 1,
+    }
+    _G.issecretvalue = function(v) return v == "SECRET_START" end
+    CDLedger:ReseedFromCooldownAPI()
+    _G.issecretvalue = prev
+    assert_false(CDLedger:IsOnCooldown(288613),
+        "Secret-gated cooldown snapshots must not seed guessed state")
 end)
 
 test("Reset clears all tracked timers", function()

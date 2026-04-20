@@ -144,6 +144,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     Display = TrueShot.Display
 
     if event == "PLAYER_ENTERING_WORLD" then
+        if TrueShot.CDLedger and TrueShot.CDLedger.ReseedFromCooldownAPI then
+            TrueShot.CDLedger:ReseedFromCooldownAPI()
+        end
         if TryActivate() then
             if TrueShot.GetOpt("showLoginMessage") then
                 local profile = Engine.activeProfile

@@ -103,21 +103,17 @@ local Profile = {
             condition = { type = "trueshot_just_cast", seconds = 2 },
         },
 
-        -- [src §Sequencing "Rapid Fire into Trueshot"] "Ideal setup follows
-        -- pattern: Rapid Fire -> Trueshot -> Aimed Shot." Pair the RF-recency
-        -- signal with the legal ac_suggested readiness gate for TS.
+        -- [src issue #89] Blizzard AC can omit Trueshot entirely, so the queue
+        -- uses the cast-tracked CD ledger for readiness and keeps the existing
+        -- Volley anti-overlap as the sequencing guardrail.
         {
             type = "PIN",
             spellID = SPELLS.Trueshot,
-            reason = "Post-RF Window",
+            reason = "Trueshot",
             condition = {
                 type = "and",
-                left  = { type = "ac_suggested", spellID = SPELLS.Trueshot },
-                right = {
-                    type = "and",
-                    left  = { type = "rapid_fire_recent", seconds = 3 },
-                    right = { type = "not", inner = { type = "volley_recent", seconds = 2 } },
-                },
+                left  = { type = "cd_ready", spellID = SPELLS.Trueshot },
+                right = { type = "in_combat" },
             },
         },
 
@@ -131,22 +127,18 @@ local Profile = {
             condition = { type = "not", inner = { type = "trueshot_active" } },
         },
 
-        -- [src §ST #7] "Moonlight Chakram (filler when no Aimed Shots)" - elevate
-        -- Chakram only when AC already recommends it AND Aimed Shot has no
-        -- charges. PREFER (not PIN) so AC's own ordering wins when it already
-        -- leads with Chakram.
+        -- [src issue #89] Moonlight Chakram replaces the Trueshot button
+        -- during the buff window, so AC suggestion is not a reliable gate.
+        -- Keep it as a late Trueshot-window filler only when Aimed Shot has
+        -- no charges; Engine:IsSpellCastable enforces the final legality gate.
         {
             type = "PREFER",
             spellID = SPELLS.MoonlightChakram,
             reason = "Chakram",
             condition = {
                 type = "and",
-                left  = { type = "ac_suggested", spellID = SPELLS.MoonlightChakram },
-                right = {
-                    type = "and",
-                    left  = { type = "trueshot_active" },
-                    right = { type = "not", inner = { type = "aimed_shot_ready" } },
-                },
+                left  = { type = "trueshot_active" },
+                right = { type = "not", inner = { type = "aimed_shot_ready" } },
             },
         },
     },

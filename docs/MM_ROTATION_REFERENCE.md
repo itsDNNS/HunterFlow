@@ -9,7 +9,7 @@
 | cross-check | Wowhead MM Rotation | https://www.wowhead.com/guide/classes/hunter/marksmanship/rotation-cooldowns-pve-dps | Patch 12.0.1, updated 2026-04-15 |
 | spec fact | Wowhead Sentinel Hero | https://www.wowhead.com/guide/classes/hunter/marksmanship/hero-talents | Sentinel: Moonlight Chakram replaces the Trueshot button while Trueshot is active |
 
-**Last reviewed: 2026-04-18** against the sources above.
+**Last reviewed: 2026-04-20** against the sources above.
 
 This document is the authoritative shipped-rule reference for:
 
@@ -58,7 +58,7 @@ Dark Ranger adds the clearest override value in two places:
 | Black Arrow immediately after Trueshot | `PIN` | `ba_ready AND trueshot_just_cast(2)` | Spend the free opener proc cleanly. |
 | Wailing Arrow inside Trueshot opener | `PIN` | `wa_available AND NOT ba_ready AND trueshot_active` | Preserve the intended `TS -> BA -> WA -> BA` flow. |
 | Black Arrow during Withering Fire | `PIN` | `ba_ready AND in_withering_fire` | Highest-value BA window in the Dark Ranger lane. |
-| Trueshot only after Rapid Fire and not after Volley | `PIN` | `ac_suggested(Trueshot) AND rapid_fire_recent(3) AND NOT volley_recent(2)` | Conservative post-RF gating without raw `IsSpellUsable()` dependence. |
+| Trueshot when ready and in combat | `PIN` | `cd_ready(Trueshot) AND in_combat` | Surface Trueshot even when Blizzard AC omits it, while cooldown truth comes from the cast-tracked ledger. |
 | Black Arrow outside Withering Fire | `PREFER` | `ba_ready AND NOT in_withering_fire` | Soft nudge only, not a full hard-override outside burst. |
 
 ### Legal signal basis
@@ -66,11 +66,10 @@ Dark Ranger adds the clearest override value in two places:
 | Mechanic | Signal class | Source |
 | --- | --- | --- |
 | Trueshot was cast | direct | `UNIT_SPELLCAST_SUCCEEDED` |
-| Rapid Fire was cast recently | direct | `UNIT_SPELLCAST_SUCCEEDED` |
 | Volley was cast recently | direct | `UNIT_SPELLCAST_SUCCEEDED` |
 | Withering Fire window | heuristic | bounded local timer after Trueshot cast |
 | Black Arrow readiness fallback | heuristic | bounded local timer plus cast-driven resets |
-| Trueshot readiness gate | direct enough for shipped use | `ac_suggested(Trueshot)` via Blizzard Assisted Combat |
+| Trueshot readiness gate | heuristic with direct cast updates | `cd_ready(Trueshot)` via `State/CDLedger`, seeded by observed casts and live base-CD reads |
 
 ### Explicit non-goals
 
@@ -86,7 +85,7 @@ Sentinel is intentionally leaner.
 
 Its override layer is mainly about:
 
-1. **Post-Rapid-Fire Trueshot timing**
+1. **Reliable Trueshot surfacing even when Blizzard AC omits it**
 2. **Blocking bad Trueshot / Volley overlap**
 3. **Treating Moonlight Chakram as a late Trueshot-window filler rather than a general priority spell**
 
@@ -96,20 +95,20 @@ Its override layer is mainly about:
 | --- | --- | --- | --- |
 | Trueshot right after Volley blocked | `BLACKLIST_CONDITIONAL` | `volley_recent(2)` | Avoid overlap waste. |
 | Volley right after Trueshot blocked | `BLACKLIST_CONDITIONAL` | `trueshot_just_cast(2)` | Same anti-overlap in the other direction. |
-| Trueshot post-RF only | `PIN` | `ac_suggested(Trueshot) AND rapid_fire_recent(3) AND NOT volley_recent(2)` | Use Blizzard AC as the legal readiness gate, then tighten timing. |
+| Trueshot when ready and in combat | `PIN` | `cd_ready(Trueshot) AND in_combat` | The profile must not depend on AC surfacing Trueshot first. |
 | Moonlight Chakram outside Trueshot blocked | `BLACKLIST_CONDITIONAL` | `NOT trueshot_active` | Keep Chakram from surfacing in the wrong context. |
-| Moonlight Chakram as late Trueshot filler | `PREFER` | `ac_suggested(MoonlightChakram) AND trueshot_active AND NOT aimed_shot_ready` | Only elevate it when the safer filler window is present. |
+| Moonlight Chakram as late Trueshot filler | `PREFER` | `trueshot_active AND NOT aimed_shot_ready` | Surface the replacement spell from the local Trueshot window even if AC omits it. |
 
 ### Legal signal basis
 
 | Mechanic | Signal class | Source |
 | --- | --- | --- |
 | Trueshot was cast | direct | `UNIT_SPELLCAST_SUCCEEDED` |
-| Rapid Fire was cast recently | direct | `UNIT_SPELLCAST_SUCCEEDED` |
 | Volley was cast recently | direct | `UNIT_SPELLCAST_SUCCEEDED` |
 | Trueshot active | heuristic with direct upgrade | player aura check first, timer fallback second |
 | Aimed Shot availability | direct enough for shipped use | validated charge count from `C_Spell.GetSpellCharges` |
-| Trueshot / Chakram readiness gate | direct enough for shipped use | `ac_suggested(...)` via Blizzard Assisted Combat |
+| Trueshot readiness gate | heuristic with direct cast updates | `cd_ready(Trueshot)` via `State/CDLedger`, seeded by observed casts and live base-CD reads |
+| Moonlight Chakram legality gate | engine-enforced | `trueshot_active` / `aimed_shot_ready` in the profile, plus `Engine:IsSpellCastable` at queue-build time |
 
 ### Explicit non-goals
 
