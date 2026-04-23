@@ -20,6 +20,13 @@ local MAX_RULE_ROWS = 80  -- generous cap; profiles rarely exceed 20 rules
 local TYPE_COLORS = {
     PIN                  = { r = 1.0, g = 0.4, b = 0.4 },
     PREFER               = { r = 0.4, g = 0.4, b = 1.0 },
+    EXPERIMENTAL_PIN     = { r = 1.0, g = 0.55, b = 0.1 },
+    EXPERIMENTAL_PREFER  = { r = 0.35, g = 0.65, b = 1.0 },
+    LABEL                = { r = 0.2, g = 0.9, b = 0.7 },
+    HINT                 = { r = 0.2, g = 0.8, b = 0.9 },
+    SUPPRESS_DUPLICATE   = { r = 0.7, g = 0.7, b = 0.7 },
+    PROFILE_CARD         = { r = 0.7, g = 0.5, b = 1.0 },
+    FALLBACK             = { r = 0.9, g = 0.9, b = 0.4 },
     BLACKLIST             = { r = 0.6, g = 0.6, b = 0.6 },
     BLACKLIST_CONDITIONAL = { r = 0.6, g = 0.6, b = 0.6 },
 }
@@ -27,11 +34,22 @@ local TYPE_COLORS = {
 local TYPE_LABELS = {
     PIN                  = "PIN",
     PREFER               = "PREFER",
+    EXPERIMENTAL_PIN     = "XPIN",
+    EXPERIMENTAL_PREFER  = "XPREF",
+    LABEL                = "LABEL",
+    HINT                 = "HINT",
+    SUPPRESS_DUPLICATE   = "SUP",
+    PROFILE_CARD         = "CARD",
+    FALLBACK             = "FALL",
     BLACKLIST             = "BL",
     BLACKLIST_CONDITIONAL = "BL?",
 }
 
-local TYPE_ORDER = { "PIN", "PREFER", "BLACKLIST", "BLACKLIST_CONDITIONAL" }
+local TYPE_ORDER = {
+    "LABEL", "HINT", "PROFILE_CARD", "SUPPRESS_DUPLICATE", "FALLBACK",
+    "PIN", "PREFER", "EXPERIMENTAL_PIN", "EXPERIMENTAL_PREFER",
+    "BLACKLIST", "BLACKLIST_CONDITIONAL",
+}
 
 local CONDITION_PRESETS = {
     { label = "Spell Proc Active",      template = { type = "spell_glowing", spellID = nil } },

@@ -439,6 +439,9 @@ local SCHEMA_VERSION = 1
 
 local VALID_RULE_TYPES = {
     PIN = true, PREFER = true, BLACKLIST = true, BLACKLIST_CONDITIONAL = true,
+    EXPERIMENTAL_PIN = true, EXPERIMENTAL_PREFER = true,
+    LABEL = true, HINT = true, SUPPRESS_DUPLICATE = true,
+    PROFILE_CARD = true, FALLBACK = true,
 }
 
 local VALID_VAR_TYPES = {

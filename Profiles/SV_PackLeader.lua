@@ -87,7 +87,7 @@ local Profile = {
         -- Takedown buff window; once KC has fired inside that window the flag
         -- flips and this rule no-ops until the next Takedown.
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = SPELLS.KillCommand,
             reason = "Stampede",
             condition = {
@@ -102,7 +102,7 @@ local Profile = {
         -- conservative charge-cap proxy instead, which keeps the "never waste a
         -- charge" intent under the Midnight API surface.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = SPELLS.WildfireBomb,
             reason = "Charge Cap",
             condition = { type = "wfb_charges", op = "==", value = 2 },
@@ -113,7 +113,7 @@ local Profile = {
         -- local-timer CD gate) because outside the burst window AC already
         -- surfaces it well; a wider PIN would fight AC more than it helps.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = SPELLS.Boomstick,
             reason = "Takedown Burst",
             condition = {
@@ -127,7 +127,7 @@ local Profile = {
         -- ac_suggested so the override does not fire when AC already knows the
         -- spell is not castable (keeps the rule legal under the CD-secret API).
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = SPELLS.FlamefangPitch,
             reason = "Flamefang",
             condition = { type = "ac_suggested", spellID = SPELLS.FlamefangPitch },

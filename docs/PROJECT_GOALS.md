@@ -4,17 +4,17 @@
 
 ## Primary Goal
 
-Build a hunter-first recommendation framework for Retail `Midnight` that is:
+Build a hunter-first Assisted Combat presentation/training framework for Retail `Midnight` that is:
 
 - lightweight
 - performant on the live client
 - honest about API limits
-- functionally strong enough that Hunter players can rely on it as a real rotational aid
+- functionally strong enough that Hunter players can use it as a real learning and presentation aid
 - reusable enough that additional classes can be added later without re-architecting the addon
 
 In short:
 
-`TrueShot` should aim for the highest practical Hunter gameplay value per unit of client overhead, while laying clean groundwork for later class expansion.
+`TrueShot` should aim for the highest practical Hunter gameplay value per unit of client overhead that is defensible under Blizzard's Midnight addon model, while laying clean groundwork for later class expansion.
 
 ## Scope Priority
 
@@ -52,9 +52,9 @@ The goal is to stay lightweight **while still delivering the full practical func
 
 That means `TrueShot` should still try to provide:
 
-- a reliable recommendation queue
-- spec-aware Hunter behavior where signals are legal and validated
-- configurable, understandable overrides
+- a reliable Assisted Combat presentation queue
+- spec-aware Hunter hints where signals are legal and validated
+- configurable, understandable presentation rules
 - useful debug visibility
 - graceful fallback behavior when a signal is unavailable
 
@@ -67,6 +67,7 @@ So "full functionality" does **not** mean:
 - recreating a legacy full-state simulation engine
 - pretending hidden resources, cooldowns, or aura state are known
 - piling on features that require constant heavy polling or opaque inference
+- shipping an optimal Hekili/APL-style live next-GCD solver under Midnight
 
 ### 4. Explainability beats cleverness
 
@@ -81,6 +82,16 @@ When a signal cannot be trusted:
 - the profile should fall back cleanly
 - the engine should prefer Blizzard `Assisted Combat`
 - the addon should become simpler rather than wrong
+
+### 6. Strict baseline before experiments
+
+The shippable baseline must work as an Assisted Combat presentation layer with no hidden-state solver.
+
+Signal-gated experimental overrides can exist, but they must:
+
+- be explicitly marked as experimental
+- fail closed when the signal is unknown or restricted
+- never be required for the product's core value claim
 
 ## Engineering Implications
 
@@ -99,6 +110,7 @@ These goals imply a few concrete defaults:
 
 - a kitchen-sink UI addon
 - a hidden-state combat simulator
+- an optimal Hekili replacement in the legacy live-solver sense
 - a feature pile that grows faster than its validation model
 - a framework that treats performance as something to optimize later
 
@@ -108,5 +120,6 @@ A change is aligned only if it can answer both questions well:
 
 1. Does this improve practical player value?
 2. Does this preserve the lightweight, low-overhead character of the addon?
+3. Does this preserve the Midnight compliance boundary?
 
-If the answer to either is weak, the change should be challenged before it lands.
+If the answer to any of these is weak, the change should be challenged before it lands.

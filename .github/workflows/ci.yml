@@ -15,12 +15,5 @@ jobs:
       - name: Install Lua
         run: sudo apt-get update && sudo apt-get install -y lua5.4
 
-      - name: Syntax check
-        run: luac5.4 -p *.lua
-
-      - name: Run Lua tests
-        run: |
-          for f in tests/*.lua; do
-            echo "RUN:$f"
-            lua5.4 "$f"
-          done
+      - name: Release gate
+        run: scripts/release_gate.sh

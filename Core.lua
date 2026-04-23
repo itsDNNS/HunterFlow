@@ -37,6 +37,7 @@ local DEFAULTS = {
     showLoginMessage = false,
     showScorecard = true,
     showHeartbeat = false,
+    strictCompliance = true,
 }
 
 local optionCallbacks = {}
@@ -312,6 +313,22 @@ SlashCmdList["TRUESHOT"] = function(msg)
         print("|cff00ff00[TS]|r Diagnostics: " .. state)
         print("  Use `/ts diagnostics on` or `/ts diagnostics off`.")
 
+    elseif msg == "strict on" then
+        TrueShot.SetOpt("strictCompliance", true)
+        if Display and Display.MarkDirty then Display:MarkDirty() end
+        print("|cff00ff00[TS]|r Strict compliance mode ON. Experimental overrides disabled.")
+
+    elseif msg == "strict off" or msg == "experimental on" then
+        TrueShot.SetOpt("strictCompliance", false)
+        if Display and Display.MarkDirty then Display:MarkDirty() end
+        print("|cffffff00[TS]|r Experimental override mode ON. Use only for validation.")
+
+    elseif msg == "strict" or msg == "experimental" then
+        local strict = TrueShot.GetOpt("strictCompliance") ~= false
+        print("|cff00ff00[TS]|r Strict compliance mode: " .. (strict and "ON" or "OFF"))
+        print("  /ts strict on  - Disable experimental overrides")
+        print("  /ts strict off - Enable experimental overrides for validation")
+
     elseif msg == "debug" then
         local queue = Engine:ComputeQueue(TrueShot.GetOpt("iconCount"))
         print("|cff00ff00[TS] Queue:|r")
@@ -328,6 +345,20 @@ SlashCmdList["TRUESHOT"] = function(msg)
             end
         end
         print("  Burst mode: " .. tostring(Engine.burstModeActive))
+
+    elseif msg == "smoke" then
+        if TrueShot.SmokeTest and TrueShot.SmokeTest.Run then
+            TrueShot.SmokeTest:Run()
+        else
+            print("|cffff0000[TS]|r SmokeTest not loaded.")
+        end
+
+    elseif msg == "combat-smoke" or msg == "combat smoke" then
+        if TrueShot.SmokeTest and TrueShot.SmokeTest.Run then
+            TrueShot.SmokeTest:Run({ mode = "combat", requireCombat = true })
+        else
+            print("|cffff0000[TS]|r SmokeTest not loaded.")
+        end
 
     elseif msg:sub(1, 5) == "probe" then
         if not TrueShot.DiagnosticsEnabled() then
@@ -388,6 +419,8 @@ SlashCmdList["TRUESHOT"] = function(msg)
         print("  /ts hide    - Hide the display")
         print("  /ts show    - Show the display")
         print("  /ts debug   - Print queue and profile state")
+        print("  /ts smoke   - Run in-client strict compliance smoke test")
+        print("  /ts combat-smoke - Run strict compliance smoke test requiring combat")
         print("  /ts score   - Show recent alignment scores")
         print("  /ts rules   - Open the Visual Rule Builder")
         print("  /ts profiles - Open the Visual Rule Builder (alias for /ts rules)")
@@ -395,6 +428,7 @@ SlashCmdList["TRUESHOT"] = function(msg)
         print("  /ts export  - Export custom profile as shareable string")
         print("  /ts import  - Import a profile from a shared string")
         print("  /ts diagnostics on|off - Enable or disable probe diagnostics")
+        print("  /ts strict on|off - Toggle strict compliance / experimental override mode")
         print("  /ts probe   - Signal validation probes (only when diagnostics are enabled)")
 
     else

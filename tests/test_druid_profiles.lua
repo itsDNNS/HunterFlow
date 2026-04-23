@@ -96,9 +96,10 @@ _G.CreateFrame = function(_frameType, _name)
     }
 end
 
-TrueShot = {}
+TrueShot = { strictCompliance = false }
 TrueShot.CustomProfile = { RegisterConditionSchema = function(_, _) end }
 
+dofile("SignalRegistry.lua")
 dofile("Engine.lua")
 dofile("State/CDLedger.lua")
 dofile("Profiles/Feral_Wildstalker.lua")

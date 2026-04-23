@@ -103,7 +103,7 @@ local Profile = {
         -- Arrow sequence maximizes proc utilization within cooldown windows."
         -- Step 1: BA immediately after Trueshot (the free opener proc).
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = SPELLS.BlackArrow,
             reason = "TS Opener BA",
             condition = {
@@ -116,7 +116,7 @@ local Profile = {
         -- [src §DR-Burst step 3] Wailing Arrow after the first BA is spent
         -- (procs the second free BA while still inside the Trueshot window).
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = SPELLS.WailingArrow,
             reason = "TS Wailing",
             condition = {
@@ -134,7 +134,7 @@ local Profile = {
         -- the top-line spell. This PIN covers the extended BA-ready window the
         -- profile models after Trueshot (see state.witheringFireUntil).
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = SPELLS.BlackArrow,
             reason = "Withering Fire",
             condition = {
@@ -148,7 +148,7 @@ local Profile = {
         -- uses the cast-tracked CD ledger for readiness and keeps the existing
         -- Volley anti-overlap as the sequencing guardrail.
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = SPELLS.Trueshot,
             reason = "Trueshot",
             condition = {
@@ -162,7 +162,7 @@ local Profile = {
         -- soft hint, not an override: PREFER only. If AC already surfaces BA the
         -- rule is a no-op; otherwise the queue bumps BA ahead of plain filler.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = SPELLS.BlackArrow,
             reason = "BA Ready",
             condition = {

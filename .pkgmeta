@@ -1,0 +1,15 @@
+package-as: TrueShot
+
+manual-changelog: CHANGELOG.md
+
+ignore:
+  - .git
+  - .github
+  - .DS_Store
+  - tests
+  - scripts
+  - tasks
+  - dist
+  - SavedVariables
+  - WTF
+  - docs/specs

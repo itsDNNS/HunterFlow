@@ -86,7 +86,7 @@ local Profile = {
         -- non-secret in docs/SIGNAL_VALIDATION.md) and let AC handle the
         -- Mark-driven timing via its own internal state.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = SPELLS.WildfireBomb,
             reason = "Charge Cap",
             condition = { type = "spell_charges", spellID = SPELLS.WildfireBomb, op = ">=", value = 2 },
@@ -97,7 +97,7 @@ local Profile = {
         -- Takedown burst window and only when the local-timer CD gate permits,
         -- since Boomstick readiness outside the burst depends on hidden state.
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = SPELLS.Boomstick,
             reason = "Takedown Burst",
             condition = {
@@ -112,7 +112,7 @@ local Profile = {
         -- fighting AC when Chakram would naturally surface later. Conservative
         -- by design.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = SPELLS.MoonlightChakram,
             reason = "Chakram",
             condition = {
@@ -125,7 +125,7 @@ local Profile = {
         -- [src §Sentinel ST #6] "Flamefang Pitch on cooldown." Gate the PREFER
         -- on ac_suggested so the override stays legal under the CD-secret API.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = SPELLS.FlamefangPitch,
             reason = "Flamefang",
             condition = { type = "ac_suggested", spellID = SPELLS.FlamefangPitch },

@@ -17,6 +17,7 @@ Engine.lastQueueMeta = {
     scoreBreakdown = nil,
     phase = nil,
     aoeHintSpell = nil,
+    reasonCode = "AC_PRIMARY",
 }
 
 function Engine:ResetQueueMeta()
@@ -28,10 +29,20 @@ function Engine:ResetQueueMeta()
     meta.scoreBreakdown = nil
     meta.phase = nil
     meta.aoeHintSpell = nil
+    meta.reasonCode = "AC_PRIMARY"
 end
 
 local function IsSecret(val)
     return issecretvalue and issecretvalue(val) or false
+end
+
+local function IsStrictMode()
+    return TrueShot.SignalRegistry and TrueShot.SignalRegistry:IsStrictMode()
+end
+
+local function IsConditionAllowed(cond)
+    if not TrueShot.SignalRegistry then return true end
+    return TrueShot.SignalRegistry:IsConditionAllowed(cond)
 end
 
 -- Per-tick caches: use a monotonic frame counter instead of GetTime() floats
@@ -184,6 +195,7 @@ end
 
 function Engine:EvalCondition(cond)
     if not cond then return true end
+    if not IsConditionAllowed(cond) then return false end
 
     if cond.type == "usable" then
         if C_Spell and C_Spell.IsSpellUsable then
@@ -297,6 +309,7 @@ function Engine:IsSpellCastable(spellID)
     if not spellID then return false end
     local known = IsPlayerSpell(spellID)
     if not known then return false end
+    if IsStrictMode() then return true end
 
     -- Charge-bearing spells are directly readable enough for shipped use.
     -- If at least one charge is available, treat the spell as castable even
@@ -424,6 +437,9 @@ function Engine:CollectHybridCandidates(profile, baseSpell, rotSpells)
 end
 
 function Engine:SelectHybridDecision(profile, baseSpell, rotSpells)
+    if IsStrictMode() then
+        return nil
+    end
     if not profile or not profile.hybrid or profile.hybrid.enabled ~= true then
         return nil
     end
@@ -542,24 +558,32 @@ function Engine:ComputeQueue(iconCount)
         score = hybridDecision.score
         scoreBreakdown = hybridDecision.scoreBreakdown
     else
-        -- PIN rules (highest priority, first match wins)
+        -- PIN rules (highest priority, first match wins). EXPERIMENTAL_PIN is
+        -- only reachable when strict mode is disabled. Existing PIN/PREFER
+        -- rules are treated as experimental until strict-safe presentation
+        -- rule types exist.
         local pinnedSpell = nil
         local firedRule = nil
-        for _, rule in ipairs(profile.rules) do
-            if rule.type == "PIN" and self:EvalCondition(rule.condition) then
-                if self:IsSpellCastable(rule.spellID) and not IsBlocked(rule.spellID) then
-                    pinnedSpell = rule.spellID
-                    firedRule = rule
-                    break
+        if not IsStrictMode() then
+            for _, rule in ipairs(profile.rules) do
+                if (rule.type == "PIN" or rule.type == "EXPERIMENTAL_PIN")
+                    and self:EvalCondition(rule.condition) then
+                    if self:IsSpellCastable(rule.spellID) and not IsBlocked(rule.spellID) then
+                        pinnedSpell = rule.spellID
+                        firedRule = rule
+                        break
+                    end
                 end
             end
         end
 
-        -- PREFER rules (only if no PIN fired)
+        -- PREFER rules (only if no PIN fired). EXPERIMENTAL_PREFER is only
+        -- reachable when strict mode is disabled.
         local preferredSpell = nil
-        if not pinnedSpell then
+        if not pinnedSpell and not IsStrictMode() then
             for _, rule in ipairs(profile.rules) do
-                if rule.type == "PREFER" and self:EvalCondition(rule.condition) then
+                if (rule.type == "PREFER" or rule.type == "EXPERIMENTAL_PREFER")
+                    and self:EvalCondition(rule.condition) then
                     if self:IsSpellCastable(rule.spellID) and not IsBlocked(rule.spellID) then
                         preferredSpell = rule.spellID
                         firedRule = rule
@@ -571,7 +595,7 @@ function Engine:ComputeQueue(iconCount)
 
         pos1 = pinnedSpell or preferredSpell or baseSpell
         if firedRule then
-            source = firedRule.type == "PIN" and "pin" or "prefer"
+            source = (firedRule.type == "PIN" or firedRule.type == "EXPERIMENTAL_PIN") and "pin" or "prefer"
             reason = firedRule.reason
         end
     end
@@ -582,7 +606,7 @@ function Engine:ComputeQueue(iconCount)
 
     -- Phase detection: profile-specific first, then engine-level AoE
     local phase = nil
-    if profile.GetPhase then
+    if not IsStrictMode() and profile.GetPhase then
         phase = profile:GetPhase()
     end
     if not phase then
@@ -605,6 +629,13 @@ function Engine:ComputeQueue(iconCount)
     self.lastQueueMeta.scoreBreakdown = scoreBreakdown
     self.lastQueueMeta.phase = phase
     self.lastQueueMeta.aoeHintSpell = aoeHintSpell
+    if source == "ac" then
+        self.lastQueueMeta.reasonCode = "AC_PRIMARY"
+    elseif source == "hybrid" then
+        self.lastQueueMeta.reasonCode = "EXPERIMENTAL_OVERRIDE"
+    else
+        self.lastQueueMeta.reasonCode = "EXPERIMENTAL_OVERRIDE"
+    end
 
     -- Positions 2+ from GetRotationSpells()
     if rotSpells then

@@ -96,7 +96,7 @@ local Profile = {
         -- the guide explicitly ranks BA-in-WF above KC-proc for the burst window
         -- since the glow persists across the GCD but the WF cast budget does not.
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = 466930, -- Black Arrow
             reason = "Withering Fire",
             condition = {
@@ -112,7 +112,7 @@ local Profile = {
         -- promote the proc via PIN; inside WF, BA stays higher so it is only
         -- PREFER (see below).
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = 34026, -- Kill Command
             reason = "KC Proc",
             condition = {
@@ -129,7 +129,7 @@ local Profile = {
         -- [src §ST #3 inside WF] Buffed KC during Withering Fire: still high
         -- priority, but PREFER-only so BA-in-WF stays pinned.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = 34026, -- Kill Command
             reason = "KC Proc (WF)",
             condition = {
@@ -147,7 +147,7 @@ local Profile = {
         -- WF ends ~5s before BW, so "7s on BW" maps to ~2.5s remaining on WF.
         -- The WA tail fires a free BA, keeping the BA chain inside the WF window.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = 392060, -- Wailing Arrow
             reason = "WF Ending",
             condition = {
@@ -160,7 +160,7 @@ local Profile = {
         -- [src §ST #8] "Black Arrow" as a lower-priority filler outside WF.
         -- PREFER (not PIN) so AC still wins if it already surfaces BA.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = 466930, -- Black Arrow
             reason = "BA Ready",
             condition = {

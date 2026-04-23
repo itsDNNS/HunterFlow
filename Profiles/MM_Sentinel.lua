@@ -108,7 +108,7 @@ local Profile = {
         -- uses the cast-tracked CD ledger for readiness and keeps the existing
         -- Volley anti-overlap as the sequencing guardrail.
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = SPELLS.Trueshot,
             reason = "Trueshot",
             condition = {
@@ -133,7 +133,7 @@ local Profile = {
         -- Keep it as a late Trueshot-window filler only when Aimed Shot has
         -- no charges; Engine:IsSpellCastable enforces the final legality gate.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = SPELLS.MoonlightChakram,
             reason = "Chakram",
             condition = {

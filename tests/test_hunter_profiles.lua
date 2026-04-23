@@ -107,7 +107,7 @@ end
 -- Minimal Engine + CustomProfile stubs that capture registered profiles
 ------------------------------------------------------------------------
 
-TrueShot = {}
+TrueShot = { strictCompliance = false }
 local registered = {}
 
 -- Placeholder captured before Engine.lua loads. The real Engine overwrites the
@@ -122,6 +122,7 @@ TrueShot.CustomProfile = {
 -- Load Engine + CDLedger + all Hunter profiles into the capture table
 ------------------------------------------------------------------------
 
+dofile("SignalRegistry.lua")
 dofile("Engine.lua")
 
 -- Override RegisterProfile so each profile file's load-time registration
@@ -317,20 +318,20 @@ test("BM PL: Combat end clears Stampede flag", function()
         "OnCombatEnd must clear Stampede to avoid stale arming between fights")
 end)
 
-test("BM PL: Stampede PIN is ordered before the KC Proc PIN (first-match-wins)", function()
+test("BM PL: Stampede experimental PIN is ordered before the KC Proc experimental PIN (first-match-wins)", function()
     local p = P("Hunter.BM.PackLeader")
     local stampedeIdx, kcProcIdx = nil, nil
     for i, rule in ipairs(p.rules) do
-        if rule.type == "PIN" and rule.spellID == 34026 then
+        if rule.type == "EXPERIMENTAL_PIN" and rule.spellID == 34026 then
             if rule.reason == "Stampede" then stampedeIdx = i
             elseif rule.reason == "KC Proc" then kcProcIdx = i end
         end
     end
-    assert_true(stampedeIdx, "Stampede PIN rule must exist")
-    assert_true(kcProcIdx, "KC Proc PIN rule must exist")
+    assert_true(stampedeIdx, "Stampede EXPERIMENTAL_PIN rule must exist")
+    assert_true(kcProcIdx, "KC Proc EXPERIMENTAL_PIN rule must exist")
     assert_true(stampedeIdx < kcProcIdx,
-        "Engine ComputeQueue iterates rules in order and takes the first PIN whose " ..
-        "condition is true (Engine.lua:337). To make the post-BW queue surface " ..
+        "Engine ComputeQueue iterates rules in order and takes the first experimental PIN whose " ..
+        "condition is true. To make the post-BW queue surface " ..
         "reason='Stampede', the Stampede rule must be declared before the KC Proc rule.")
 end)
 
@@ -907,6 +908,174 @@ test("SV Sentinel: OnCombatEnd clears Takedown window", function()
     p:OnCombatEnd()
     assert_false(p:EvalCondition({ type = "takedown_active" }),
         "Combat-end must not leave stale Takedown burst state")
+end)
+
+------------------------------------------------------------------------
+-- Strict compliance mode
+------------------------------------------------------------------------
+
+test("Strict mode: BM Pack Leader falls back to AC and ignores hybrid overrides", function()
+    local previous = TrueShot.strictCompliance
+    TrueShot.strictCompliance = true
+
+    local p = P("Hunter.BM.PackLeader")
+    local Engine = TrueShot.Engine
+    Engine.activeProfile = p
+    Engine:RebuildBlacklist()
+
+    set_ac_state(true, 56641, { 56641, 34026, 217200 })
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], 56641,
+        "Strict mode must not replace AC slot 1 with local BW/hybrid logic")
+    assert_eq(Engine.lastQueueMeta.source, "ac")
+    assert_eq(Engine.lastQueueMeta.reasonCode, "AC_PRIMARY")
+
+    TrueShot.strictCompliance = previous
+end)
+
+test("Strict mode: unsafe condition signals fail closed", function()
+    local previous = TrueShot.strictCompliance
+    TrueShot.strictCompliance = true
+
+    local Engine = TrueShot.Engine
+    set_charges(217200, 2, 2)
+    set_power(100)
+
+    assert_false(Engine:EvalCondition({ type = "spell_charges", spellID = 217200, op = ">=", value = 1 }),
+        "spell_charges is not allowed to drive strict-mode decisions")
+    assert_false(Engine:EvalCondition({ type = "resource", powerType = 2, op = ">=", value = 10 }),
+        "resource is not allowed to drive strict-mode decisions")
+    assert_false(Engine:EvalCondition({ type = "cd_ready", spellID = 19574 }),
+        "CDLedger readiness is not allowed to drive strict-mode decisions")
+
+    TrueShot.strictCompliance = previous
+end)
+
+test("Strict mode: AC queue survives without risky combat APIs", function()
+    local previousStrict = TrueShot.strictCompliance
+    local previousUnitPower = _G.UnitPower
+    local previousUnitCastingInfo = _G.UnitCastingInfo
+    local previousUnitChannelInfo = _G.UnitChannelInfo
+    local previousNamePlate = _G.C_NamePlate
+    local previousAuras = _G.C_UnitAuras
+    local previousCooldown = _G.C_Spell.GetSpellCooldown
+    local previousCharges = _G.C_Spell.GetSpellCharges
+
+    TrueShot.strictCompliance = true
+    _G.UnitPower = nil
+    _G.UnitCastingInfo = nil
+    _G.UnitChannelInfo = nil
+    _G.C_NamePlate = nil
+    _G.C_UnitAuras = nil
+    _G.C_Spell.GetSpellCooldown = nil
+    _G.C_Spell.GetSpellCharges = nil
+
+    local p = P("Hunter.MM.DarkRanger")
+    local Engine = TrueShot.Engine
+    Engine.activeProfile = p
+    Engine:RebuildBlacklist()
+    set_ac_state(true, 257044, { 257044, 19434, 56641 })
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], 257044,
+        "Strict mode must render the AC primary without resource/aura/cooldown/nameplate APIs")
+    assert_eq(queue[2], 19434)
+    assert_eq(queue[3], 56641)
+    assert_eq(Engine.lastQueueMeta.reasonCode, "AC_PRIMARY")
+
+    TrueShot.strictCompliance = previousStrict
+    _G.UnitPower = previousUnitPower
+    _G.UnitCastingInfo = previousUnitCastingInfo
+    _G.UnitChannelInfo = previousUnitChannelInfo
+    _G.C_NamePlate = previousNamePlate
+    _G.C_UnitAuras = previousAuras
+    _G.C_Spell.GetSpellCooldown = previousCooldown
+    _G.C_Spell.GetSpellCharges = previousCharges
+end)
+
+test("Experimental rule types only fire outside strict mode", function()
+    local previous = TrueShot.strictCompliance
+    local Engine = TrueShot.Engine
+    local profile = {
+        id = "Test.Experimental",
+        rules = {
+            {
+                type = "EXPERIMENTAL_PIN",
+                spellID = 19574,
+                reason = "Experimental BW",
+                condition = { type = "ac_suggested", spellID = 19574 },
+            },
+        },
+    }
+
+    Engine.activeProfile = profile
+    Engine:RebuildBlacklist()
+    set_ac_state(true, 56641, { 56641, 19574 })
+
+    TrueShot.strictCompliance = true
+    local strictQueue = Engine:ComputeQueue(2)
+    assert_eq(strictQueue[1], 56641,
+        "Strict mode must ignore EXPERIMENTAL_PIN and keep AC primary")
+
+    TrueShot.strictCompliance = false
+    local experimentalQueue = Engine:ComputeQueue(2)
+    assert_eq(experimentalQueue[1], 19574,
+        "Experimental mode may fire EXPERIMENTAL_PIN")
+    assert_eq(Engine.lastQueueMeta.reasonCode, "EXPERIMENTAL_OVERRIDE")
+
+    TrueShot.strictCompliance = previous
+end)
+
+test("Strict mode: legacy PIN/PREFER do not reorder AC even with strict-safe conditions", function()
+    local previous = TrueShot.strictCompliance
+    local Engine = TrueShot.Engine
+    local profile = {
+        id = "Test.StrictNoLegacyOverride",
+        rules = {
+            {
+                type = "PREFER",
+                spellID = 19574,
+                reason = "Strict-safe AC suggested prefer",
+                condition = { type = "ac_suggested", spellID = 19574 },
+            },
+        },
+    }
+
+    Engine.activeProfile = profile
+    Engine:RebuildBlacklist()
+    set_ac_state(true, 56641, { 56641, 19574 })
+
+    TrueShot.strictCompliance = true
+    local strictQueue = Engine:ComputeQueue(2)
+    assert_eq(strictQueue[1], 56641,
+        "Strict mode must not let legacy PREFER reorder the AC primary")
+
+    TrueShot.strictCompliance = false
+    local experimentalQueue = Engine:ComputeQueue(2)
+    assert_eq(experimentalQueue[1], 19574,
+        "Experimental mode keeps legacy PREFER behavior")
+
+    TrueShot.strictCompliance = previous
+end)
+
+test("Hunter shipped profiles do not use legacy PIN/PREFER rule types", function()
+    local hunterProfiles = {
+        "Hunter.BM.DarkRanger",
+        "Hunter.BM.PackLeader",
+        "Hunter.MM.DarkRanger",
+        "Hunter.MM.Sentinel",
+        "Hunter.SV.PackLeader",
+        "Hunter.SV.Sentinel",
+    }
+
+    for _, id in ipairs(hunterProfiles) do
+        local profile = P(id)
+        for _, rule in ipairs(profile.rules) do
+            assert_true(rule.type ~= "PIN" and rule.type ~= "PREFER",
+                id .. " must use EXPERIMENTAL_PIN/EXPERIMENTAL_PREFER for live overrides")
+        end
+    end
 end)
 
 ------------------------------------------------------------------------

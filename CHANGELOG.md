@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.27.0-alpha.1 - 2026-04-23
+
+### Added
+- **Midnight strict compliance baseline**. Added `SignalRegistry.lua` and default-on strict compliance mode so unvalidated live combat signals fail closed and Hunter strict output remains Blizzard Assisted Combat primary.
+- **In-client smoke gates**. Added `/ts smoke` and `/ts combat-smoke`; reports are persisted to `TrueShotDB.smokeReport` and appended to `TrueShotDB.smokeHistory`.
+- **Release gate automation**. Added `scripts/release_gate.sh`, `scripts/check_wow_smoke.lua`, and WoW install/read/watch helpers for repeatable local and live-client verification.
+- **Package build**. Added `VERSION`, `.pkgmeta`, and `scripts/build_package.sh` to produce a clean `dist/TrueShot-0.27.0-alpha.1.zip` artifact.
+
+### Changed
+- **Hunter strict product posture**. All six Hunter hero profiles now use explicit `EXPERIMENTAL_PIN` / `EXPERIMENTAL_PREFER` for live override behavior. Strict mode ignores those paths and preserves `source=ac`, `reasonCode=AC_PRIMARY`.
+- **Midnight positioning**. README and project docs now describe TrueShot as a Hunter-first Assisted Combat presentation layer/trainer, not an optimal Hekili-style live solver.
+- **CI**. GitHub Actions now runs the unified release gate.
+
+### Validation
+- Local gate: `scripts/release_gate.sh` passed.
+- Live-client gate: `scripts/release_gate.sh --wow` passed against WoW `12.0.5.67114`, Interface `120005`.
+- All six Hunter hero paths passed `/ts smoke` and `/ts combat-smoke` with `strict=true`, `acAvailable=true`, `queue=2`, `source=ac`, and `reasonCode=AC_PRIMARY`.
+- Test suite: 128 passed, 0 failed.
+
 ## v0.26.1 - 2026-04-23
 
 ### Fixed

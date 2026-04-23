@@ -66,7 +66,7 @@ local Profile = {
 
     -- Hybrid pilot: keep BLACKLIST* rules as hard gates, but choose slot 1 from
     -- explicit buckets plus lightweight filler tiebreaks instead of pure
-    -- PIN/PREFER first-match-wins.
+    -- Experimental PIN/PREFER first-match-wins.
     hybrid = {
         enabled = true,
         bucketOrder = {
@@ -115,7 +115,7 @@ local Profile = {
         -- Ranger for BW because the ledger-backed path proved unreliable live
         -- in this profile.
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = 19574, -- Bestial Wrath
             reason = "Bestial Wrath",
             condition = { type = "not", inner = { type = "bw_on_cd" } },
@@ -126,7 +126,7 @@ local Profile = {
         -- the Stampede trigger even if AC has not prioritised KC yet.
         -- Nature's Ally is satisfied because BW itself clears last_cast_was_kc.
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = 34026, -- Kill Command
             reason = "Stampede",
             condition = { type = "stampede_available" },
@@ -137,7 +137,7 @@ local Profile = {
         -- is a direct non-secret signal for a Nature's-Ally-buffed KC that AC does
         -- not always prioritise on position 1.
         {
-            type = "PIN",
+            type = "EXPERIMENTAL_PIN",
             spellID = 34026, -- Kill Command
             reason = "KC Proc",
             condition = {
@@ -153,7 +153,7 @@ local Profile = {
         -- pressed KC and need a Nature's Ally weave, or because KC is not
         -- actually castable yet.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = 217200, -- Barbed Shot
             reason = "Barbed Shot Filler",
             condition = {
@@ -174,7 +174,7 @@ local Profile = {
         -- [src §ST #5] Cobra Shot is the final fallback filler. Use it when
         -- KC is not the immediate play and Barbed Shot has no available charge.
         {
-            type = "PREFER",
+            type = "EXPERIMENTAL_PREFER",
             spellID = 56641, -- Cobra Shot
             reason = "Cobra Shot Filler",
             condition = {

@@ -9,6 +9,11 @@
 
 The current addon already uses this split in code. The framework remains intentionally conservative in runtime scope, but it is no longer in a single-profile early alpha state.
 
+Current project direction:
+
+- [Midnight Project Plan](MIDNIGHT_PROJECT_PLAN.md)
+- [Midnight Compliance Audit](MIDNIGHT_COMPLIANCE_AUDIT.md)
+
 ## 1. Engine
 
 The engine owns:

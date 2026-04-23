@@ -1,4 +1,4 @@
-## Interface: 120000
+## Interface: 120005
 ## Title: TrueShot
 ## Notes: Rotation overlay for WoW Midnight. Layers priority fixes on top of Blizzard Assisted Combat.
 ## Author: itsDNNS
@@ -10,8 +10,10 @@
 ## SavedVariables: TrueShotDB
 ## OptionalDeps: Masque
 
+SignalRegistry.lua
 Engine.lua
 State/CDLedger.lua
+SmokeTest.lua
 CustomProfile.lua
 Profiles/BM_DarkRanger.lua
 Profiles/BM_PackLeader.lua
