@@ -41,13 +41,17 @@ _G.C_ClassTalents.GetActiveHeroTalentSpec = function()
 end
 
 _G.C_NamePlate = _G.C_NamePlate or { GetNamePlates = function() return {} end }
+local _ac_available = false
+local _ac_next_spell = nil
+local _ac_rotation_spells = {}
 _G.C_AssistedCombat = _G.C_AssistedCombat or {
-    IsAvailable = function() return false end,
-    GetNextCastSpell = function() return nil end,
-    GetRotationSpells = function() return {} end,
+    IsAvailable = function() return _ac_available end,
+    GetNextCastSpell = function() return _ac_next_spell end,
+    GetRotationSpells = function() return _ac_rotation_spells end,
 }
+local _overlayed_spells = {}
 _G.C_SpellActivationOverlay = _G.C_SpellActivationOverlay or {
-    IsSpellOverlayed = function() return false end,
+    IsSpellOverlayed = function(spellID) return _overlayed_spells[spellID] == true end,
 }
 _G.C_Spell = _G.C_Spell or {}
 _G.C_Spell.IsSpellUsable = function(_) return true end
@@ -146,6 +150,10 @@ local function test(name, fn)
     _active_hero_subtree = nil
     _player_spells = {}
     Engine.activeProfile = nil
+    _ac_available = false
+    _ac_next_spell = nil
+    _ac_rotation_spells = {}
+    _overlayed_spells = {}
     local ok, err = pcall(fn)
     if ok then
         passed = passed + 1
@@ -167,6 +175,27 @@ local function assert_profile(id)
     local active = Engine.activeProfile
     assert_true(active ~= nil, "Engine should have activated a profile")
     assert_eq(active.id, id, "Engine activated the wrong profile")
+end
+
+
+local function get_profile(specID, profileID)
+    local candidates = TrueShot.Profiles[specID]
+    if not candidates then return nil end
+    for _, p in ipairs(candidates) do
+        if p.id == profileID then return p end
+    end
+    return nil
+end
+
+local function has_rule(profile, ruleType, spellID, conditionType)
+    for _, rule in ipairs(profile.rules or {}) do
+        if rule.type == ruleType and rule.spellID == spellID then
+            if not conditionType or (rule.condition and rule.condition.type == conditionType) then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 local function assert_profile_metadata(specID, profileID, expected)
@@ -196,6 +225,38 @@ test("All supported hero-path profiles declare subtree IDs and expected fallback
             assert_profile_metadata(specID, profileID, expected)
         end
     end
+end)
+
+
+test("Frost profiles expose Glacial Spike for custom spell selectors", function()
+    local glacialSpike = 199786
+    for _, profileID in ipairs({ "Mage.Frost.Frostfire", "Mage.Frost.Spellslinger" }) do
+        local profile = get_profile(64, profileID)
+        assert_true(profile ~= nil, "Frost profile should be registered: " .. profileID)
+        assert_true(profile.rotationalSpells and profile.rotationalSpells[glacialSpike] == true,
+            profileID .. " should include Glacial Spike in rotationalSpells")
+        assert_true(has_rule(profile, "PREFER", glacialSpike, "spell_glowing"),
+            profileID .. " should prefer Glacial Spike when its proc glow is exposed")
+    end
+end)
+
+test("Frost Glacial Spike glow rule can surface ahead of AC filler", function()
+    local glacialSpike = 199786
+    local frostbolt = 116
+    local profile = get_profile(64, "Mage.Frost.Frostfire")
+    assert_true(profile ~= nil, "Frost Frostfire profile should be registered")
+
+    Engine.activeProfile = profile
+    Engine:RebuildBlacklist()
+    _player_spells[frostbolt] = true
+    _player_spells[glacialSpike] = true
+    _ac_available = true
+    _ac_next_spell = frostbolt
+    _ac_rotation_spells = { frostbolt, glacialSpike }
+    _overlayed_spells[glacialSpike] = true
+
+    local queue = Engine:ComputeQueue(3)
+    assert_eq(queue[1], glacialSpike, "glowing Glacial Spike should be preferred over AC filler")
 end)
 
 ------------------------------------------------------------------------

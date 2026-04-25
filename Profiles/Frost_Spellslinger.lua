@@ -3,6 +3,22 @@
 
 local Engine = TrueShot.Engine
 
+local SPELLS = {
+    GlacialSpike  = 199786,
+    Flurry        = 44614,
+    IceLance      = 30455,
+    FrozenOrb     = 84714,
+    Frostbolt     = 116,
+    Blizzard      = 190356,
+    IceNova       = 157997,
+    RayOfFrost    = 205021,
+    CometStorm    = 153595,
+    IcyVeins      = 12472,
+    Polymorph     = 118,
+    Spellsteal    = 30449,
+    ArcaneInt     = 1459,
+}
+
 local Profile = {
     id = "Mage.Frost.Spellslinger",
     displayName = "Frost Spellslinger",
@@ -23,17 +39,38 @@ local Profile = {
 
     state = {},
 
+    rotationalSpells = {
+        [SPELLS.GlacialSpike] = true,
+        [SPELLS.Flurry]       = true,
+        [SPELLS.IceLance]     = true,
+        [SPELLS.FrozenOrb]    = true,
+        [SPELLS.Frostbolt]    = true,
+        [SPELLS.Blizzard]     = true,
+        [SPELLS.IceNova]      = true,
+        [SPELLS.RayOfFrost]   = true,
+        [SPELLS.CometStorm]   = true,
+        [SPELLS.IcyVeins]     = true,
+    },
+
     rules = {
-        { type = "BLACKLIST", spellID = 118 },     -- Polymorph
-        { type = "BLACKLIST", spellID = 30449 },   -- Spellsteal
-        { type = "BLACKLIST", spellID = 1459 },    -- Arcane Intellect
+        { type = "BLACKLIST", spellID = SPELLS.Polymorph },
+        { type = "BLACKLIST", spellID = SPELLS.Spellsteal },
+        { type = "BLACKLIST", spellID = SPELLS.ArcaneInt },
+
+        -- Glacial Spike: prefer the proc when the client exposes the glow.
+        {
+            type = "PREFER",
+            spellID = SPELLS.GlacialSpike,
+            reason = "Glacial Spike",
+            condition = { type = "spell_glowing", spellID = SPELLS.GlacialSpike },
+        },
 
         -- Brain Freeze: PREFER Flurry when proc is active (glow detection)
         {
             type = "PREFER",
-            spellID = 44614, -- Flurry
+            spellID = SPELLS.Flurry,
             reason = "Brain Freeze",
-            condition = { type = "spell_glowing", spellID = 44614 },
+            condition = { type = "spell_glowing", spellID = SPELLS.Flurry },
         },
     },
 }

@@ -128,9 +128,25 @@ local function RemoveConditionType(condition, typeId)
 end
 
 local function GetSpellDisplay(spellID)
-    if not spellID then return nil, "Unknown" end
-    local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or "Spell " .. spellID
-    local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID) or 134400
+    if not spellID then return nil, "Select spell" end
+
+    local name
+    if C_Spell and C_Spell.GetSpellName then
+        local ok, result = pcall(C_Spell.GetSpellName, spellID)
+        if ok and result and not (issecretvalue and issecretvalue(result)) then
+            name = result
+        end
+    end
+    name = name or ("Spell " .. tostring(spellID))
+
+    local icon = 134400
+    if C_Spell and C_Spell.GetSpellTexture then
+        local ok, result = pcall(C_Spell.GetSpellTexture, spellID)
+        if ok and result and not (issecretvalue and issecretvalue(result)) then
+            icon = result
+        end
+    end
+
     return icon, name
 end
 
@@ -1229,7 +1245,17 @@ local function CreateParamInputs(parent, condition, schema, anchorTo, onChange)
             UIDropDownMenu_SetWidth(dd, 130)
 
             local spellList = GetRotationalSpellList()
+            local manualEdit
             UIDropDownMenu_Initialize(dd, function()
+                if #spellList == 0 then
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = "No profile spells"
+                    info.notClickable = true
+                    info.disabled = true
+                    UIDropDownMenu_AddButton(info)
+                    return
+                end
+
                 for _, sid in ipairs(spellList) do
                     local sIcon, sName = GetSpellDisplay(sid)
                     local info = UIDropDownMenu_CreateInfo()
@@ -1239,6 +1265,7 @@ local function CreateParamInputs(parent, condition, schema, anchorTo, onChange)
                     info.func = function()
                         condition[param.field] = sid
                         UIDropDownMenu_SetText(dd, sName)
+                        if manualEdit then manualEdit:SetText(tostring(sid)) end
                         if onChange then onChange() end
                     end
                     UIDropDownMenu_AddButton(info)
@@ -1247,7 +1274,39 @@ local function CreateParamInputs(parent, condition, schema, anchorTo, onChange)
 
             local _, curName = GetSpellDisplay(condition[param.field])
             UIDropDownMenu_SetText(dd, curName)
-            lastAnchor = dd
+
+            local manualRow = CreateFrame("Frame", nil, parent)
+            TrackFrame(manualRow)
+            manualRow:SetSize(220, 22)
+            manualRow:SetPoint("TOPLEFT", dd, "BOTTOMLEFT", 16, -4)
+
+            local manualLabel = manualRow:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            manualLabel:SetPoint("LEFT", manualRow, "LEFT", 0, 0)
+            manualLabel:SetText((param.label or "Spell") .. " ID:")
+
+            manualEdit = CreateFrame("EditBox", nil, manualRow, "InputBoxTemplate")
+            manualEdit:SetSize(80, 20)
+            manualEdit:SetPoint("LEFT", manualLabel, "RIGHT", 6, 0)
+            manualEdit:SetAutoFocus(false)
+            manualEdit:SetNumeric(true)
+            manualEdit:SetText(condition[param.field] and tostring(condition[param.field]) or "")
+
+            local function ApplyManualSpell()
+                local val = tonumber(manualEdit:GetText())
+                if val and val > 0 and condition[param.field] ~= val then
+                    condition[param.field] = val
+                    local _, name = GetSpellDisplay(val)
+                    UIDropDownMenu_SetText(dd, name)
+                    if onChange then onChange() end
+                end
+            end
+            manualEdit:SetScript("OnEnterPressed", function(self)
+                ApplyManualSpell()
+                self:ClearFocus()
+            end)
+            manualEdit:SetScript("OnEditFocusLost", ApplyManualSpell)
+
+            lastAnchor = manualRow
 
         elseif param.fieldType == "operator" then
             local ddName = NextDropdownName("TrueShotRBOp_")
@@ -1693,7 +1752,17 @@ function RuleBuilder:ShowRuleEditor(index)
     UIDropDownMenu_SetWidth(spellDd, 180)
 
     local spellList = GetRotationalSpellList()
+    local manualEdit
     UIDropDownMenu_Initialize(spellDd, function()
+        if #spellList == 0 then
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = "No profile spells"
+            info.notClickable = true
+            info.disabled = true
+            UIDropDownMenu_AddButton(info)
+            return
+        end
+
         for _, sid in ipairs(spellList) do
             local sIcon, sName = GetSpellDisplay(sid)
             local info = UIDropDownMenu_CreateInfo()
@@ -1703,6 +1772,7 @@ function RuleBuilder:ShowRuleEditor(index)
             info.func = function()
                 rule.spellID = sid
                 UIDropDownMenu_SetText(spellDd, sName)
+                if manualEdit then manualEdit:SetText(tostring(sid)) end
                 RuleBuilder:RefreshRuleList()
             end
             UIDropDownMenu_AddButton(info)
@@ -1722,7 +1792,7 @@ function RuleBuilder:ShowRuleEditor(index)
     manualLabel:SetPoint("LEFT", manualRow, "LEFT", 0, 0)
     manualLabel:SetText("or SpellID:")
 
-    local manualEdit = CreateFrame("EditBox", nil, manualRow, "InputBoxTemplate")
+    manualEdit = CreateFrame("EditBox", nil, manualRow, "InputBoxTemplate")
     manualEdit:SetSize(80, 20)
     manualEdit:SetPoint("LEFT", manualLabel, "RIGHT", 6, 0)
     manualEdit:SetAutoFocus(false)
@@ -1734,7 +1804,7 @@ function RuleBuilder:ShowRuleEditor(index)
 
     local function ApplyManualSpell()
         local val = tonumber(manualEdit:GetText())
-        if val and val > 0 then
+        if val and val > 0 and rule.spellID ~= val then
             rule.spellID = val
             local _, name = GetSpellDisplay(val)
             UIDropDownMenu_SetText(spellDd, name)
