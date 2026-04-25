@@ -1146,6 +1146,24 @@ function Display:ApplyOptions()
 
 end
 
+-- Tier-3 visual fallback: render the swipe from the local CDLedger snapshot
+-- when DurationObject and direct readable C_Spell.GetSpellCooldown both fail.
+-- Issue #54: keeps the swipe accurate for spells whose cooldown values are
+-- secret-gated on this build. Visual only; engine truth still flows through
+-- CDLedger:IsOnCooldown via the regular condition seams.
+local function TrySetCooldownFromLedger(icon, spellID)
+    if not icon or not icon.cooldown or not spellID then return false end
+    local ledger = TrueShot.CDLedger
+    if not ledger or not ledger.GetDisplaySnapshot then return false end
+    local snap = ledger:GetDisplaySnapshot(spellID)
+    if not snap then return false end
+    if snap.duration < MIN_COOLDOWN_SWIPE_DURATION then return false end
+    if not icon.cooldown.SetCooldown then return false end
+    icon.cooldown:SetCooldown(snap.startTime, snap.duration, snap.modRate or 1)
+    icon.cooldown:Show()
+    return true
+end
+
 function Display:UpdateCooldown(icon, spellID)
     if not icon or not icon.cooldown then return end
     if not TrueShot.GetOpt("showCooldownSwipe") or not spellID then
@@ -1157,20 +1175,32 @@ function Display:UpdateCooldown(icon, spellID)
 
     -- Prefer slot-based cooldown state when available; this matches the visible
     -- action button more closely than spell-based secret cooldown data.
+    -- `apiAuthoritative` flips on only when a non-secret read produced a
+    -- definitive answer; if it stays false we treat the readable APIs as
+    -- "no answer" and the tier-3 ledger fallback may render the swipe.
     local shouldShow = false
     local actionBarResolved = false
+    local apiAuthoritative = false
     if actionSlot and C_ActionBar_GetActionCooldown then
         local ok, cooldown = pcall(C_ActionBar_GetActionCooldown, actionSlot)
         if ok and cooldown then
-            if cooldown.isActive ~= nil and not (issecretvalue and issecretvalue(cooldown.isActive)) then
-                shouldShow = cooldown.isActive == true
+            -- Cache isActive and gate it through issecretvalue BEFORE any
+            -- comparison: comparing a secret value to nil/true would taint the
+            -- boolean and leak through control flow. Only when the value is
+            -- known non-secret may we test it against nil and true.
+            local isActive = cooldown.isActive
+            local isActiveReadable = not (issecretvalue and issecretvalue(isActive))
+            if isActiveReadable and isActive ~= nil then
+                shouldShow = isActive == true
                 actionBarResolved = true
+                apiAuthoritative = true
             else
                 local startTime = cooldown.startTime or 0
                 local duration = cooldown.duration or 0
                 if not (issecretvalue and (issecretvalue(startTime) or issecretvalue(duration))) then
                     shouldShow = startTime > 0 and duration >= MIN_COOLDOWN_SWIPE_DURATION
                     actionBarResolved = true
+                    apiAuthoritative = true
                 end
             end
         end
@@ -1185,6 +1215,7 @@ function Display:UpdateCooldown(icon, spellID)
                 (issecretvalue(startTime) or issecretvalue(duration)))
             if valuesReadable then
                 shouldShow = startTime > 0 and duration >= MIN_COOLDOWN_SWIPE_DURATION
+                apiAuthoritative = true
             else
                 shouldShow = true  -- trust DurationObject to handle it
             end
@@ -1192,6 +1223,13 @@ function Display:UpdateCooldown(icon, spellID)
     end
 
     if not shouldShow then
+        -- Authoritative "not on CD" reads must be trusted - never overpaint
+        -- a ready spell with a stale local timer.
+        if apiAuthoritative then
+            ClearCooldown(icon)
+            return
+        end
+        if TrySetCooldownFromLedger(icon, spellID) then return end
         ClearCooldown(icon)
         return
     end
@@ -1215,35 +1253,27 @@ function Display:UpdateCooldown(icon, spellID)
         end
     end
 
-    -- Fallback: direct SetCooldown (pre-66562 or if DurationObject unavailable)
-    if not C_Spell_GetSpellCooldown then
-        ClearCooldown(icon)
-        return
+    -- Tier-2 fallback: direct SetCooldown with secret guards.
+    if C_Spell_GetSpellCooldown then
+        local ok, cooldown = pcall(C_Spell_GetSpellCooldown, spellID)
+        if ok and cooldown then
+            local startTime = cooldown.startTime or 0
+            local duration = cooldown.duration or 0
+            local readable = not (issecretvalue and
+                (issecretvalue(startTime) or issecretvalue(duration)))
+            if readable and startTime > 0 and duration >= MIN_COOLDOWN_SWIPE_DURATION
+               and icon.cooldown.SetCooldown then
+                icon.cooldown:SetCooldown(startTime, duration, cooldown.modRate or 1)
+                icon.cooldown:Show()
+                return
+            end
+        end
     end
 
-    local ok, cooldown = pcall(C_Spell_GetSpellCooldown, spellID)
-    if not ok or not cooldown then
-        ClearCooldown(icon)
-        return
-    end
+    -- Tier-3 fallback: local CDLedger snapshot (issue #54).
+    if TrySetCooldownFromLedger(icon, spellID) then return end
 
-    local startTime = cooldown.startTime or 0
-    local duration = cooldown.duration or 0
-
-    if issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)) then
-        ClearCooldown(icon)
-        return
-    end
-
-    if startTime <= 0 or duration < MIN_COOLDOWN_SWIPE_DURATION then
-        ClearCooldown(icon)
-        return
-    end
-
-    if icon.cooldown.SetCooldown then
-        icon.cooldown:SetCooldown(startTime, duration, cooldown.modRate or 1)
-    end
-    icon.cooldown:Show()
+    ClearCooldown(icon)
 end
 
 function Display:UpdateChargeCooldown(icon, spellID)

@@ -234,6 +234,72 @@ function CDLedger:OnCombatEnd()
     -- no-op by design
 end
 
+------------------------------------------------------------------------
+-- Display snapshot (tier-3 cooldown rendering fallback)
+--
+-- Display.lua's preferred path is DurationObject (action slot, then spell),
+-- followed by direct readable C_Spell.GetSpellCooldown values. When BOTH are
+-- unavailable (DurationObject helpers missing on this build) and the direct
+-- read is secret-gated, the swipe would otherwise blank.
+--
+-- This snapshot is a visual-only last-resort: shape matches Cooldown:SetCooldown
+-- (startTime, duration, modRate). It is NOT a strict-mode rotation truth source
+-- - the engine still consults IsOnCooldown / SecondsUntilReady through their
+-- existing seams, which carry the same caveats.
+--
+-- Returns nil for:
+--   * secret spellIDs
+--   * spells outside the tracked spec
+--   * timers that have already expired
+------------------------------------------------------------------------
+
+function CDLedger:GetDisplaySnapshot(spellID)
+    if not spellID or IsSecret(spellID) then return nil end
+    if not self.spec[spellID] then return nil end
+    local st = self.state[spellID]
+    if not st then return nil end
+    local now = GetTime()
+    if st.expected_ready <= now then return nil end
+    local duration = st.expected_ready - st.cast_time
+    if duration <= 0 then return nil end
+    return {
+        startTime = st.cast_time,
+        duration = duration,
+        modRate = 1,
+    }
+end
+
+------------------------------------------------------------------------
+-- Reconcile against C_Spell.GetSpellCooldown
+--
+-- Hook for SPELL_UPDATE_COOLDOWN. Best-effort, secret-guarded: only prunes a
+-- ledger entry when the API returns NON-SECRET values that authoritatively
+-- mean "not on cooldown" (zero startTime or zero duration). Secret/unreadable
+-- responses leave the local timer untouched, so the tier-3 display fallback
+-- stays accurate when the player just cast a gated spell.
+--
+-- Never seeds new entries: that is ReseedFromCooldownAPI's job, and we do not
+-- want a SPELL_UPDATE_COOLDOWN flood to clobber the cast-event ledger.
+------------------------------------------------------------------------
+
+function CDLedger:ReconcileFromCooldownAPI()
+    if not C_Spell or not C_Spell.GetSpellCooldown then return end
+    for spellID in pairs(self.state) do
+        local ok, cooldown = pcall(C_Spell.GetSpellCooldown, spellID)
+        if ok and type(cooldown) == "table" then
+            local startTime = cooldown.startTime
+            local duration = cooldown.duration
+            local readable = type(startTime) == "number"
+                and type(duration) == "number"
+                and not IsSecret(startTime)
+                and not IsSecret(duration)
+            if readable and (startTime <= 0 or duration <= 0) then
+                self.state[spellID] = nil
+            end
+        end
+    end
+end
+
 function CDLedger:ReseedFromCooldownAPI()
     local now = GetTime()
     self.state = {}

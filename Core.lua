@@ -114,6 +114,7 @@ eventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 eventFrame:RegisterEvent("SPELLS_CHANGED")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 
 local function ShouldShowOverlay()
     if TrueShot.GetOpt("hidden") then return false end
@@ -183,6 +184,16 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 if Display.MarkDirty then Display:MarkDirty() end
             end
         end
+
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        -- Best-effort reconcile: prunes ledger entries whose cooldowns are
+        -- demonstrably finished per a non-secret C_Spell read. Cast-event
+        -- entries with secret/unreadable responses are left intact so the
+        -- tier-3 visual swipe fallback keeps animating.
+        if TrueShot.CDLedger and TrueShot.CDLedger.ReconcileFromCooldownAPI then
+            TrueShot.CDLedger:ReconcileFromCooldownAPI()
+        end
+        if Display and Display.MarkDirty then Display:MarkDirty() end
 
     elseif event == "PLAYER_REGEN_DISABLED" then
         Engine.combatStartTime = GetTime()
