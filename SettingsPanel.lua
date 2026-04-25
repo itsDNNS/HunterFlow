@@ -407,10 +407,16 @@ local function CreateFeaturesPanel()
         castDesc, "showCooldownSwipe"
     )
 
+    local cooldownTextCheck, cooldownTextDesc = CreateCheckbox(
+        sc, "Show cooldown numbers",
+        "Display the remaining time on active cooldowns. Requires cooldown swipes.",
+        cooldownDesc, "showCooldownText"
+    )
+
     local keybindCheck, keybindDesc = CreateCheckbox(
         sc, "Show keybindings",
         "Display the keybinding text on each icon.",
-        cooldownDesc, "showKeybinds"
+        cooldownTextDesc, "showKeybinds"
     )
 
     local rangeCheck, rangeDesc = CreateCheckbox(
@@ -520,6 +526,7 @@ local function CreateFeaturesPanel()
         RunAfterLayout(panel, sc, function()
             castCheck.sync()
             cooldownCheck.sync()
+            cooldownTextCheck.sync()
             keybindCheck.sync()
             rangeCheck.sync()
             whyCheck.sync()

@@ -17,6 +17,7 @@ local DEFAULTS = {
     locked = false,
     enableDiagnostics = false,
     showCooldownSwipe = true,
+    showCooldownText = false,
     showCastFeedback = true,
     showWhyOverlay = false,
     showPhaseIndicator = false,

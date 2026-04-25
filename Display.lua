@@ -101,6 +101,12 @@ if MasqueGroup then
     end)
 end
 
+local function ClearCooldownText(icon)
+    if not icon or not icon.cooldownText then return end
+    icon.cooldownText:SetText("")
+    icon.cooldownText:Hide()
+end
+
 local function ClearCooldown(icon)
     if not icon or not icon.cooldown then return end
     if icon.cooldown.Clear then
@@ -109,6 +115,7 @@ local function ClearCooldown(icon)
         icon.cooldown:SetCooldown(0, 0)
     end
     icon.cooldown:Hide()
+    ClearCooldownText(icon)
 end
 
 local function ResetStoredQueue(state)
@@ -535,6 +542,15 @@ local function CreateIcon(index)
     frame.chargeCount:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
     frame.chargeCount:SetJustifyH("RIGHT")
     frame.chargeCount:Hide()
+
+    -- Remaining cooldown text overlay. Parented to the cooldown frame so it
+    -- naturally sits above the swipe; visibility is gated explicitly by
+    -- UpdateCooldownText (option toggle, swipe option, secret guards).
+    frame.cooldownText = frame.cooldown:CreateFontString(nil, "OVERLAY", "NumberFontNormalLarge")
+    frame.cooldownText:SetPoint("CENTER", frame.cooldown, "CENTER", 0, 0)
+    frame.cooldownText:SetJustifyH("CENTER")
+    frame.cooldownText:SetJustifyV("MIDDLE")
+    frame.cooldownText:Hide()
 
     frame.keybind = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
     frame.keybind:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
@@ -1276,6 +1292,90 @@ function Display:UpdateCooldown(icon, spellID)
     ClearCooldown(icon)
 end
 
+-- Read remaining cooldown for the text overlay using the same source priority
+-- as UpdateCooldown: action bar (when authoritative), then direct C_Spell, then
+-- the local CDLedger snapshot. Returns nil if the spell is ready, the values
+-- are secret, or the cooldown is shorter than MIN_COOLDOWN_SWIPE_DURATION.
+local function ReadRemainingCooldownSeconds(spellID)
+    if not spellID then return nil end
+    local now = GetTime()
+    local actionSlot = GetActionSlotForSpell(spellID)
+
+    if actionSlot and C_ActionBar_GetActionCooldown then
+        local ok, cooldown = pcall(C_ActionBar_GetActionCooldown, actionSlot)
+        if ok and cooldown then
+            local startTime = cooldown.startTime
+            local duration = cooldown.duration
+            local readable = type(startTime) == "number" and type(duration) == "number"
+                and not (issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)))
+            if readable then
+                if startTime > 0 and duration >= MIN_COOLDOWN_SWIPE_DURATION then
+                    local remaining = (startTime + duration) - now
+                    if remaining > 0 then return remaining end
+                end
+                return nil
+            end
+        end
+    end
+
+    if C_Spell_GetSpellCooldown then
+        local ok, cooldown = pcall(C_Spell_GetSpellCooldown, spellID)
+        if ok and cooldown then
+            local startTime = cooldown.startTime
+            local duration = cooldown.duration
+            local readable = type(startTime) == "number" and type(duration) == "number"
+                and not (issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)))
+            if readable then
+                if startTime > 0 and duration >= MIN_COOLDOWN_SWIPE_DURATION then
+                    local remaining = (startTime + duration) - now
+                    if remaining > 0 then return remaining end
+                end
+                return nil
+            end
+        end
+    end
+
+    local ledger = TrueShot.CDLedger
+    if ledger and ledger.GetDisplaySnapshot then
+        local snap = ledger:GetDisplaySnapshot(spellID)
+        if snap and snap.duration >= MIN_COOLDOWN_SWIPE_DURATION then
+            local remaining = (snap.startTime + snap.duration) - now
+            if remaining > 0 then return remaining end
+        end
+    end
+
+    return nil
+end
+
+local function FormatCooldownRemaining(remaining)
+    if remaining >= 60 then
+        return string.format("%dm", math.ceil(remaining / 60))
+    end
+    if remaining >= 10 then
+        return string.format("%d", math.ceil(remaining))
+    end
+    return string.format("%.1f", remaining)
+end
+
+function Display:UpdateCooldownText(icon, spellID)
+    if not icon or not icon.cooldownText then return end
+    if not TrueShot.GetOpt("showCooldownText")
+        or not TrueShot.GetOpt("showCooldownSwipe")
+        or not spellID then
+        ClearCooldownText(icon)
+        return
+    end
+
+    local remaining = ReadRemainingCooldownSeconds(spellID)
+    if not remaining then
+        ClearCooldownText(icon)
+        return
+    end
+
+    icon.cooldownText:SetText(FormatCooldownRemaining(remaining))
+    icon.cooldownText:Show()
+end
+
 function Display:UpdateChargeCooldown(icon, spellID)
     if not icon or not icon.chargeCooldown then return end
     if not TrueShot.GetOpt("showCooldownSwipe") or not spellID then
@@ -1429,6 +1529,7 @@ function Display:UpdateQueue(queue)
 
                 icon.spellID = spellID
                 self:UpdateCooldown(icon, spellID)
+                self:UpdateCooldownText(icon, spellID)
                 self:UpdateChargeCooldown(icon, spellID)
                 self:UpdateCastFeedback(icon, now)
                 icon:Show()
