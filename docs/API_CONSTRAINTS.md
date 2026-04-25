@@ -144,6 +144,7 @@ These are acceptable only when their output is non-authoritative, display-only, 
 - "The target is casting, so interrupt can be surfaced."
 - "Nameplate count is at least N, so prefer an AoE branch."
 - "Spell X was cast, `GetSpellBaseCooldown` returns 30000ms (non-secret), and we observed cast success, so Spell X is on cooldown until `GetTime() + 30`." This is the `State/CDLedger` pattern. Live `GetSpellBaseCooldown` values are preferred (they reflect talent CDR), with hardcoded `spec.base_ms` as a fallback when the API returns 0, nil, or secret. Haste scaling is applied through `UnitSpellHaste("player")` only for spells explicitly flagged `haste_scaled`, and degrades cleanly to "no scaling" when the read is secret.
+- "DurationObject and direct `C_Spell.GetSpellCooldown` reads are both unavailable for the action-button swipe, so render the swipe from the `CDLedger` cast-event snapshot as a tier-3 visual fallback." Used purely for the cooldown swipe animation when the preferred readers cannot render. This does not promote the local timer into rotation truth: strict-mode `cd_ready` / `cd_remaining` consumers still go through the same event-tracked seam with the heuristic caveats above. `SPELL_UPDATE_COOLDOWN` triggers `CDLedger:ReconcileFromCooldownAPI`, which only prunes entries when a non-secret API read authoritatively reports "not on cooldown" - secret responses leave the local timer (and its visual fallback) intact.
 
 Strict-mode baseline:
 

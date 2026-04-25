@@ -409,6 +409,122 @@ test("SecondsSinceCast returns nil before any cast, and elapsed time after", fun
 end)
 
 ------------------------------------------------------------------------
+-- Display snapshot (tier-3 cooldown rendering fallback)
+--
+-- Display.lua prefers DurationObject and direct readable C_Spell.GetSpellCooldown
+-- paths. When both are unavailable or secret-gated, it asks the ledger for a
+-- visual-only snapshot derived from the cast-event timer. The snapshot must:
+--   - mirror the SetCooldown(startTime, duration, modRate) shape
+--   - only describe spells we already track (no inventing for unknown IDs)
+--   - only describe currently-active timers with positive remaining time
+--   - propagate shared cooldowns the same way IsOnCooldown does
+------------------------------------------------------------------------
+
+test("GetDisplaySnapshot returns nil for unknown spell", function()
+    assert_true(CDLedger:GetDisplaySnapshot(123456789) == nil,
+        "Snapshot must not invent state for spells outside the spec")
+end)
+
+test("GetDisplaySnapshot returns nil when spell has never been cast", function()
+    assert_true(CDLedger:GetDisplaySnapshot(19574) == nil,
+        "Tracked spell with no cast observed yet has no display snapshot")
+end)
+
+test("GetDisplaySnapshot returns startTime/duration/modRate after cast", function()
+    set_time(1000)
+    CDLedger:OnSpellCastSucceeded(19574)
+    local snap = CDLedger:GetDisplaySnapshot(19574)
+    assert_true(snap ~= nil, "Active CD must produce a snapshot")
+    assert_near(snap.startTime, 1000, 0.01, "startTime should be the cast time")
+    assert_near(snap.duration, 30, 0.01, "duration should be the resolved CD seconds")
+    assert_near(snap.modRate, 1, 0.0,
+        "modRate must be 1 (wall-clock countdown, no haste-rate fakery)")
+end)
+
+test("GetDisplaySnapshot returns nil after cooldown expires", function()
+    CDLedger:OnSpellCastSucceeded(19574)
+    advance_time(30.5)
+    assert_true(CDLedger:GetDisplaySnapshot(19574) == nil,
+        "Expired timers must not produce a swipe snapshot")
+end)
+
+test("GetDisplaySnapshot survives time advances mid-cooldown", function()
+    set_time(2000)
+    CDLedger:OnSpellCastSucceeded(288613) -- Trueshot, 120s
+    advance_time(45)
+    local snap = CDLedger:GetDisplaySnapshot(288613)
+    assert_true(snap ~= nil)
+    assert_near(snap.startTime, 2000, 0.01,
+        "startTime must remain the original cast time, not the query time")
+    assert_near(snap.duration, 120, 0.01,
+        "duration must remain the full CD length so SetCooldown can compute remaining itself")
+end)
+
+test("GetDisplaySnapshot honors shared cooldowns (Berserk/Incarnation)", function()
+    CDLedger:OnSpellCastSucceeded(102543) -- Incarnation
+    local snapBerserk = CDLedger:GetDisplaySnapshot(106951)
+    assert_true(snapBerserk ~= nil,
+        "Shared cooldown sibling must report the same active swipe")
+    assert_near(snapBerserk.duration, 180, 0.01)
+end)
+
+test("GetDisplaySnapshot ignores secret spellID payloads", function()
+    CDLedger:OnSpellCastSucceeded(19574)
+    local prev = _G.issecretvalue
+    _G.issecretvalue = function(_) return true end
+    local snap = CDLedger:GetDisplaySnapshot(19574)
+    _G.issecretvalue = prev
+    assert_true(snap == nil,
+        "Secret spellID must short-circuit before touching ledger state")
+end)
+
+------------------------------------------------------------------------
+-- SPELL_UPDATE_COOLDOWN reconcile
+--
+-- The ledger optionally reconciles its state against C_Spell.GetSpellCooldown
+-- when SPELL_UPDATE_COOLDOWN fires. It must:
+--   - prune entries where the API authoritatively reports "not on CD"
+--   - leave entries alone when the API value is secret or unreadable
+--   - never invent state for spells that are not in the spec
+------------------------------------------------------------------------
+
+test("ReconcileFromCooldownAPI prunes spells the API reports as not-on-CD", function()
+    CDLedger:OnSpellCastSucceeded(19574)
+    assert_true(CDLedger:IsOnCooldown(19574))
+    -- API authoritatively says "not on CD" for BW (CDR proc, talent reset, etc.)
+    _cooldown_snapshot[19574] = { startTime = 0, duration = 0, isEnabled = true, modRate = 1 }
+    CDLedger:ReconcileFromCooldownAPI()
+    assert_false(CDLedger:IsOnCooldown(19574),
+        "Authoritative non-secret zero from API must clear stale ledger entry")
+end)
+
+test("ReconcileFromCooldownAPI keeps state when API returns secret values", function()
+    CDLedger:OnSpellCastSucceeded(19574)
+    _cooldown_snapshot[19574] = {
+        startTime = "SECRET_START",
+        duration = "SECRET_DURATION",
+        isEnabled = true,
+        modRate = 1,
+    }
+    local prev = _G.issecretvalue
+    _G.issecretvalue = function(v)
+        return v == "SECRET_START" or v == "SECRET_DURATION"
+    end
+    CDLedger:ReconcileFromCooldownAPI()
+    _G.issecretvalue = prev
+    assert_true(CDLedger:IsOnCooldown(19574),
+        "Secret API reads must NOT clobber the locally tracked timer")
+end)
+
+test("ReconcileFromCooldownAPI does not invent state for untracked spells", function()
+    -- API claims an unrelated spell is on CD, but we don't track it.
+    _cooldown_snapshot[888888] = { startTime = 1000, duration = 60, isEnabled = true, modRate = 1 }
+    CDLedger:ReconcileFromCooldownAPI()
+    assert_false(CDLedger:IsOnCooldown(888888),
+        "Reconcile must not seed entries outside the spec")
+end)
+
+------------------------------------------------------------------------
 -- Secret spellID protection
 ------------------------------------------------------------------------
 
