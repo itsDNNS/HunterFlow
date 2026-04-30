@@ -27,7 +27,8 @@ local function advance_time(dt) _time = _time + dt end
 
 _G.GetTime = function() return _time end
 _G.UnitAffectingCombat = function(_) return true end
-_G.issecretvalue = function(_) return false end
+local SECRET = {}
+_G.issecretvalue = function(value) return value == SECRET end
 _G.pcall = pcall
 
 -- CDLedger probes GetSpellBaseCooldown (non-secret on Midnight 12.0.4) and
@@ -56,11 +57,18 @@ end
 -- swapping the stub.
 _G.C_UnitAuras = _G.C_UnitAuras or {}
 local _auras_by_spell = {}
+local _buffs_by_index = {}
 local function set_player_aura(spellID, aura)
     _auras_by_spell[spellID] = aura
 end
+local function set_player_buff(index, aura)
+    _buffs_by_index[index] = aura
+end
 _G.C_UnitAuras.GetPlayerAuraBySpellID = function(spellID)
     return _auras_by_spell[spellID]
+end
+_G.C_UnitAuras.GetBuffDataByIndex = function(_, index)
+    return _buffs_by_index[index]
 end
 
 -- Engine.lua expects CreateFrame at load time for an internal glow-tracker.
@@ -181,6 +189,7 @@ local function test(name, fn)
     _spell_usable = {}
     _spell_cooldowns = {}
     _auras_by_spell = {}
+    _buffs_by_index = {}
     _ac_available = false
     _ac_next_spell = nil
     _ac_rotation_spells = {}
@@ -879,6 +888,25 @@ test("SV PL: WFB charges condition respects operators", function()
     assert_true(p:EvalCondition({ type = "wfb_charges", op = ">=", value = 1 }))
 end)
 
+test("SV PL: exposes Raptor Swipe in rotational spell catalog", function()
+    local p = P("Hunter.SV.PackLeader")
+    assert_true(p.rotationalSpells and p.rotationalSpells[1259019] == true,
+        "Raptor Swipe must be selectable from Survival Pack Leader custom rules")
+end)
+
+test("SV PL: Tip of the Spear stack condition reads safe player buff stacks", function()
+    local p = P("Hunter.SV.PackLeader")
+    set_player_buff(7, { name = "Tip of the Spear", spellId = 260286, applications = 2 })
+    assert_true(p:EvalCondition({ type = "tip_of_the_spear_stacks", op = ">=", value = 2 }))
+    assert_false(p:EvalCondition({ type = "tip_of_the_spear_stacks", op = ">", value = 2 }))
+end)
+
+test("SV PL: Tip of the Spear stack condition fails closed on secret stacks", function()
+    local p = P("Hunter.SV.PackLeader")
+    set_player_buff(3, { name = "Tip of the Spear", spellId = 260286, applications = SECRET })
+    assert_false(p:EvalCondition({ type = "tip_of_the_spear_stacks", op = ">=", value = 1 }))
+end)
+
 ------------------------------------------------------------------------
 -- SV Sentinel
 ------------------------------------------------------------------------
@@ -908,6 +936,19 @@ test("SV Sentinel: OnCombatEnd clears Takedown window", function()
     p:OnCombatEnd()
     assert_false(p:EvalCondition({ type = "takedown_active" }),
         "Combat-end must not leave stale Takedown burst state")
+end)
+
+test("SV Sentinel: exposes Raptor Swipe in rotational spell catalog", function()
+    local p = P("Hunter.SV.Sentinel")
+    assert_true(p.rotationalSpells and p.rotationalSpells[1259019] == true,
+        "Raptor Swipe must be selectable from Survival Sentinel custom rules")
+end)
+
+test("SV Sentinel: Tip of the Spear stack condition reads safe player buff stacks", function()
+    local p = P("Hunter.SV.Sentinel")
+    set_player_buff(7, { name = "Tip of the Spear", spellId = 260286, applications = 3 })
+    assert_true(p:EvalCondition({ type = "tip_of_the_spear_stacks", op = ">=", value = 3 }))
+    assert_false(p:EvalCondition({ type = "tip_of_the_spear_stacks", op = "==", value = 2 }))
 end)
 
 ------------------------------------------------------------------------

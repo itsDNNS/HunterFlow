@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.27.0-alpha.2 - 2026-05-01
+
+### Added
+- **Survival custom rules**. Added `Raptor Swipe` (`1259019`) to both Survival Hunter rotational spell catalogs so it can be selected in custom profile rules.
+- **Tip of the Spear stack condition**. Added a Survival-specific `Tip of the Spear Stacks` condition backed by the validated player buff signal (`260286`). The condition reads stack counts defensively and fails closed when aura data is secret or unavailable.
+
+### Tests
+- Added Hunter profile coverage for `Raptor Swipe` catalog exposure and `Tip of the Spear Stacks` evaluation, including the secret-stack fail-closed path.
+- Local release validation: `scripts/run_tests.sh`, `luac -p`, and `git diff --check` passed.
+
 ## v0.27.0-alpha.1 - 2026-04-23
 
 ### Added

@@ -40,6 +40,9 @@ local SPELLS = {
     WildfireBomb     = 259495,
     MoonlightChakram = 1264902,
     FlamefangPitch   = 1251592,
+    RaptorStrike     = 186270,
+    RaptorSwipe      = 1259019,
+    TipOfTheSpear    = 260286,
     Harpoon          = 190925,
     CallPet1         = 883,
     RevivePet        = 982,
@@ -63,7 +66,8 @@ local Profile = {
         [259495]  = true, -- Wildfire Bomb
         [1264902] = true, -- Moonlight Chakram
         [1251592] = true, -- Flamefang Pitch
-        [186270]  = true, -- Raptor Strike
+        [SPELLS.RaptorStrike] = true, -- Raptor Strike
+        [SPELLS.RaptorSwipe]  = true, -- Raptor Swipe
         [259489]  = true, -- Kill Command (SV)
         [53351]   = true, -- Kill Shot
     },
@@ -165,6 +169,38 @@ end
 -- Profile-specific condition evaluation
 ------------------------------------------------------------------------
 
+local function CompareNumber(value, op, threshold)
+    op = op or ">="
+    threshold = threshold or 0
+    if op == "==" then return value == threshold end
+    if op == ">=" then return value >= threshold end
+    if op == ">"  then return value >  threshold end
+    if op == "<=" then return value <= threshold end
+    if op == "<"  then return value <  threshold end
+    return false
+end
+
+local function GetTipOfTheSpearStacks()
+    if not C_UnitAuras or not C_UnitAuras.GetBuffDataByIndex then
+        return 0
+    end
+
+    for i = 1, 40 do
+        local ok, aura = pcall(C_UnitAuras.GetBuffDataByIndex, "player", i)
+        if not ok then return 0 end
+        if aura ~= nil and not (issecretvalue and issecretvalue(aura)) then
+            local spellId = aura.spellId
+            if not (issecretvalue and issecretvalue(spellId)) and spellId == SPELLS.TipOfTheSpear then
+                local stacks = aura.applications or 0
+                if issecretvalue and issecretvalue(stacks) then return 0 end
+                return stacks
+            end
+        end
+    end
+
+    return 0
+end
+
 function Profile:EvalCondition(cond)
     local s = self.state
     local now = GetTime()
@@ -179,6 +215,9 @@ function Profile:EvalCondition(cond)
     elseif cond.type == "boomstick_on_cd" then
         if s.lastBoomstickCast == 0 then return false end
         return (now - s.lastBoomstickCast) < BOOMSTICK_COOLDOWN
+
+    elseif cond.type == "tip_of_the_spear_stacks" then
+        return CompareNumber(GetTipOfTheSpearStacks(), cond.op, cond.value or 1)
 
     end
 
@@ -195,6 +234,7 @@ function Profile:GetDebugLines()
     local tdRemaining = s.takedownUntil - now
 
     local wfbLine = "unknown"
+    local tipStacks = GetTipOfTheSpearStacks()
     if C_Spell and C_Spell.GetSpellCharges then
         local ok, info = pcall(C_Spell.GetSpellCharges, SPELLS.WildfireBomb)
         if ok and info and info.currentCharges then
@@ -209,6 +249,7 @@ function Profile:GetDebugLines()
             and string.format("%.1fs remaining", tdRemaining)
             or "inactive"),
         "  WFB: " .. wfbLine,
+        "  Tip of the Spear: " .. tostring(tipStacks),
     }
 end
 
@@ -236,5 +277,10 @@ if TrueShot.CustomProfile then
           params = { { field = "seconds", fieldType = "number", default = 5, label = "Seconds window" } } },
         { id = "takedown_active",   label = "Takedown Active",           params = {} },
         { id = "boomstick_on_cd",   label = "Boomstick On Cooldown",     params = {} },
+        { id = "tip_of_the_spear_stacks", label = "Tip of the Spear Stacks",
+          params = {
+              { field = "op",    fieldType = "operator", choices = {">=", ">", "==", "<", "<="}, default = ">=", label = "Operator" },
+              { field = "value", fieldType = "number", default = 1, label = "Stacks" },
+          } },
     })
 end

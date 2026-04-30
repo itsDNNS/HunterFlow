@@ -23,8 +23,9 @@
 --   trigger: "Takedown immediately procs Howl of the Pack Leader, causing your
 --   next Kill Command to summon a Beast. Your first Kill Command inside Takedown
 --   will also launch a Stampede." (Azortharion §PL Takedown Burst Window.)
---   Tip-of-the-Spear stacks, Sentinel's Mark, and Fury-of-the-Wyvern are hidden
---   buff state and are deliberately not modelled (see docs/API_CONSTRAINTS.md).
+--   Sentinel's Mark and Fury-of-the-Wyvern are hidden buff state and are
+--   deliberately not modelled (see docs/API_CONSTRAINTS.md). Tip of the Spear
+--   is modelled through the validated, non-secret player buff stack signal.
 --   Inline tags "[src §<section> #N]" reference the priority number in the primary source.
 
 local Engine = TrueShot.Engine
@@ -42,6 +43,9 @@ local SPELLS = {
     Takedown       = 1250646,
     Boomstick      = 1261193,
     FlamefangPitch = 1251592,
+    RaptorStrike   = 186270,
+    RaptorSwipe    = 1259019,
+    TipOfTheSpear  = 260286,
     Harpoon        = 190925,
     CallPet1       = 883,
     RevivePet      = 982,
@@ -72,7 +76,8 @@ local Profile = {
         [1250646] = true, -- Takedown
         [1261193] = true, -- Boomstick
         [1251592] = true, -- Flamefang Pitch
-        [186270]  = true, -- Raptor Strike
+        [SPELLS.RaptorStrike] = true, -- Raptor Strike
+        [SPELLS.RaptorSwipe]  = true, -- Raptor Swipe
         [53351]   = true, -- Kill Shot
     },
 
@@ -176,6 +181,38 @@ end
 -- Profile-specific condition evaluation
 ------------------------------------------------------------------------
 
+local function CompareNumber(value, op, threshold)
+    op = op or ">="
+    threshold = threshold or 0
+    if op == "==" then return value == threshold end
+    if op == ">=" then return value >= threshold end
+    if op == ">"  then return value >  threshold end
+    if op == "<=" then return value <= threshold end
+    if op == "<"  then return value <  threshold end
+    return false
+end
+
+local function GetTipOfTheSpearStacks()
+    if not C_UnitAuras or not C_UnitAuras.GetBuffDataByIndex then
+        return 0
+    end
+
+    for i = 1, 40 do
+        local ok, aura = pcall(C_UnitAuras.GetBuffDataByIndex, "player", i)
+        if not ok then return 0 end
+        if aura ~= nil and not (issecretvalue and issecretvalue(aura)) then
+            local spellId = aura.spellId
+            if not (issecretvalue and issecretvalue(spellId)) and spellId == SPELLS.TipOfTheSpear then
+                local stacks = aura.applications or 0
+                if issecretvalue and issecretvalue(stacks) then return 0 end
+                return stacks
+            end
+        end
+    end
+
+    return 0
+end
+
 function Profile:EvalCondition(cond)
     local s = self.state
     local now = GetTime()
@@ -212,6 +249,9 @@ function Profile:EvalCondition(cond)
             end
         end
         return false
+
+    elseif cond.type == "tip_of_the_spear_stacks" then
+        return CompareNumber(GetTipOfTheSpearStacks(), cond.op, cond.value or 1)
     end
 
     return nil -- not handled by this profile
@@ -226,6 +266,7 @@ function Profile:GetDebugLines()
     local now = GetTime()
     local tdRemaining = s.takedownUntil - now
     local wfbCharges = "?"
+    local tipStacks = GetTipOfTheSpearStacks()
     if C_Spell and C_Spell.GetSpellCharges then
         local ok, info = pcall(C_Spell.GetSpellCharges, SPELLS.WildfireBomb)
         if ok and info and info.currentCharges then
@@ -240,6 +281,7 @@ function Profile:GetDebugLines()
             or "inactive"),
         "  KC in Takedown: " .. tostring(s.kcCastInTakedown),
         "  WFB charges: " .. wfbCharges,
+        "  Tip of the Spear: " .. tostring(tipStacks),
     }
 end
 
@@ -272,6 +314,11 @@ if TrueShot.CustomProfile then
           params = {
               { field = "op",    fieldType = "string", default = "==", label = "Operator" },
               { field = "value", fieldType = "number", default = 2,    label = "Charge count" },
+          } },
+        { id = "tip_of_the_spear_stacks", label = "Tip of the Spear Stacks",
+          params = {
+              { field = "op",    fieldType = "operator", choices = {">=", ">", "==", "<", "<="}, default = ">=", label = "Operator" },
+              { field = "value", fieldType = "number", default = 1, label = "Stacks" },
           } },
     })
 end
